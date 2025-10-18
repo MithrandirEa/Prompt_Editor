@@ -116,6 +116,9 @@ export class PromptEditorApp extends EventTarget {
             // Set up application event listeners
             this.setupApplicationEvents();
             
+            // Set up critical DOM event listeners
+            this.setupCriticalDOMEvents();
+            
             // Set up periodic tasks
             this.setupPeriodicTasks();
             
@@ -225,38 +228,50 @@ export class PromptEditorApp extends EventTarget {
     setupModuleCommunication() {
         this.logger.debug('🔗 Setting up inter-module communication...');
         
+        // Helper function to safely add event listeners
+        const safeAddEventListener = (module, event, callback, moduleName) => {
+            if (module && typeof module.addEventListener === 'function') {
+                module.addEventListener(event, callback);
+                this.logger.debug(`✅ Event listener added for ${moduleName}: ${event}`);
+            } else {
+                this.logger.warn(`⚠️ Module ${moduleName} does not support addEventListener`);
+            }
+        };
+        
         // Template events -> UI updates
-        templateManager.addEventListener(AppEvents.TEMPLATE_LOADED, (event) => {
+        safeAddEventListener(templateManager, AppEvents.TEMPLATE_LOADED, (event) => {
             this.logger.debug('Template loaded, updating UI');
             // UI updates are handled by state subscriptions
-        });
+        }, 'templateManager');
         
-        templateManager.addEventListener(AppEvents.TEMPLATES_LOADED, (event) => {
+        safeAddEventListener(templateManager, AppEvents.TEMPLATES_LOADED, (event) => {
             this.logger.debug(`${event.detail.templates.length} templates loaded`);
-            searchManager.buildIndex(event.detail.templates);
-        });
+            if (searchManager && searchManager.buildIndex) {
+                searchManager.buildIndex(event.detail.templates);
+            }
+        }, 'templateManager');
         
         // Search events -> State updates
-        searchManager.addEventListener(AppEvents.SEARCH_COMPLETED, (event) => {
+        safeAddEventListener(searchManager, AppEvents.SEARCH_COMPLETED, (event) => {
             this.logger.debug(`Search completed: ${event.detail.resultCount} results`);
             this.updateActivity();
-        });
+        }, 'searchManager');
         
         // UI events -> Actions
-        uiManager.addEventListener(AppEvents.TAB_CHANGED, (event) => {
+        safeAddEventListener(uiManager, AppEvents.TAB_CHANGED, (event) => {
             this.logger.debug(`Tab changed to: ${event.detail.tab}`);
             this.updateActivity();
-        });
+        }, 'uiManager');
         
         // API events -> Performance tracking
-        apiClient.addEventListener('request_completed', (event) => {
+        safeAddEventListener(apiClient, 'request_completed', (event) => {
             this.metrics.totalRequests++;
-        });
+        }, 'apiClient');
         
         // Error events -> Logging and recovery
-        errorHandler.addEventListener(AppEvents.ERROR_OCCURRED, (event) => {
+        safeAddEventListener(errorHandler, AppEvents.ERROR_OCCURRED, (event) => {
             this.handleApplicationError(event.detail.error);
-        });
+        }, 'errorHandler');
         
         this.logger.info('🔗 Inter-module communication established');
     }
@@ -311,6 +326,345 @@ export class PromptEditorApp extends EventTarget {
         });
         
         this.logger.debug('📡 Application event listeners configured');
+    }
+
+    /**
+     * Set up critical DOM event listeners that must work
+     */
+    setupCriticalDOMEvents() {
+        this.logger.debug('🎯 Setting up critical DOM event listeners...');
+        
+        // Sidebar toggle
+        const toggleSidebar = document.getElementById('toggle-sidebar');
+        if (toggleSidebar) {
+            toggleSidebar.addEventListener('click', () => {
+                this.logger.debug('Sidebar toggle clicked');
+                const sidebar = document.getElementById('templates-sidebar');
+                const collapsed = document.getElementById('collapsed-sidebar');
+                if (sidebar && collapsed) {
+                    sidebar.classList.add('hidden');
+                    collapsed.classList.remove('hidden');
+                }
+            });
+        }
+        
+        // Expand sidebar
+        const expandSidebar = document.getElementById('expand-sidebar');
+        if (expandSidebar) {
+            expandSidebar.addEventListener('click', () => {
+                this.logger.debug('Sidebar expand clicked');
+                const sidebar = document.getElementById('templates-sidebar');
+                const collapsed = document.getElementById('collapsed-sidebar');
+                if (sidebar && collapsed) {
+                    sidebar.classList.remove('hidden');
+                    collapsed.classList.add('hidden');
+                }
+            });
+        }
+        
+        // Tab navigation
+        const editorTab = document.getElementById('editor-tab');
+        const managerTab = document.getElementById('manager-tab');
+        const editorContent = document.getElementById('editor-content');
+        const managerContent = document.getElementById('manager-content');
+        
+        if (editorTab && managerTab && editorContent && managerContent) {
+            editorTab.addEventListener('click', () => {
+                this.logger.debug('Editor tab clicked');
+                // Remove active class from manager tab
+                managerTab.classList.remove('tab-active');
+                managerTab.classList.add('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
+                
+                // Add active class to editor tab
+                editorTab.classList.add('tab-active');
+                editorTab.classList.remove('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
+                
+                // Show editor content, hide manager content
+                editorContent.classList.remove('hidden');
+                managerContent.classList.add('hidden');
+            });
+            
+            managerTab.addEventListener('click', async () => {
+                this.logger.debug('Manager tab clicked');
+                // Remove active class from editor tab
+                editorTab.classList.remove('tab-active');
+                editorTab.classList.add('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
+                
+                // Add active class to manager tab
+                managerTab.classList.add('tab-active');
+                managerTab.classList.remove('text-gray-600', 'dark:text-gray-300', 'hover:bg-gray-100', 'dark:hover:bg-gray-700');
+                
+                // Show manager content, hide editor content
+                managerContent.classList.remove('hidden');
+                editorContent.classList.add('hidden');
+                
+                // Load templates for manager view
+                await this.loadTemplatesForManager();
+            });
+        }
+        
+        // New template button
+        const newTemplateBtn = document.getElementById('new-template-btn');
+        if (newTemplateBtn) {
+            newTemplateBtn.addEventListener('click', () => {
+                this.logger.debug('New template button clicked');
+                // Clear the editor
+                const titleInput = document.getElementById('template-title');
+                const contentArea = document.getElementById('markdown-editor');
+                if (titleInput) titleInput.value = '';
+                if (contentArea) contentArea.value = '';
+                
+                // Switch to editor tab
+                if (editorTab) editorTab.click();
+            });
+        }
+        
+        // Global search
+        const globalSearch = document.getElementById('global-search');
+        if (globalSearch) {
+            globalSearch.addEventListener('input', (e) => {
+                this.logger.debug('Search input:', e.target.value);
+                // Basic search functionality
+                this.performBasicSearch(e.target.value);
+            });
+        }
+        
+        // Save template button
+        const saveTemplateBtn = document.getElementById('save-template');
+        if (saveTemplateBtn) {
+            saveTemplateBtn.addEventListener('click', async () => {
+                await this.saveCurrentTemplate();
+            });
+        }
+        
+        this.logger.info('🎯 Critical DOM event listeners configured');
+    }
+    
+    /**
+     * Perform basic search functionality
+     */
+    performBasicSearch(query) {
+        if (!query.trim()) return;
+        
+        // Simple search in template titles in sidebar
+        const templateItems = document.querySelectorAll('.template-item');
+        templateItems.forEach(item => {
+            const title = item.querySelector('h4');
+            if (title) {
+                const titleText = title.textContent.toLowerCase();
+                const isMatch = titleText.includes(query.toLowerCase());
+                item.style.display = isMatch ? 'block' : 'none';
+            }
+        });
+    }
+
+    /**
+     * Save the current template
+     */
+    async saveCurrentTemplate() {
+        try {
+            this.logger.debug('Saving current template...');
+            
+            const titleInput = document.getElementById('template-title');
+            const contentArea = document.getElementById('markdown-editor');
+            
+            if (!titleInput || !contentArea) {
+                throw new Error('Template form elements not found');
+            }
+            
+            const title = titleInput.value.trim();
+            const content = contentArea.value.trim();
+            
+            if (!title) {
+                this.showNotification('Veuillez entrer un titre pour le template', 'error');
+                return;
+            }
+            
+            const templateData = {
+                title: title,
+                content: content,
+                description: `Template créé le ${new Date().toLocaleDateString()}`
+            };
+            
+            // Use fetch to save template
+            const response = await fetch('/api/templates', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(templateData)
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            this.logger.info('Template saved successfully:', result);
+            
+            this.showNotification('Template sauvegardé avec succès !', 'success');
+            
+            // Reload templates in sidebar
+            await this.loadTemplatesForSidebar();
+            
+        } catch (error) {
+            this.logger.error('Error saving template:', error);
+            this.showNotification(`Erreur lors de la sauvegarde: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * Load templates for the manager view
+     */
+    async loadTemplatesForManager() {
+        try {
+            this.logger.debug('Loading templates for manager...');
+            
+            const response = await fetch('/api/templates');
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const templates = data.data || [];
+            
+            this.logger.info(`Loaded ${templates.length} templates for manager`);
+            
+            // Update templates grid
+            const templatesGrid = document.getElementById('templates-grid');
+            if (!templatesGrid) return;
+            
+            templatesGrid.innerHTML = '';
+            
+            if (templates.length === 0) {
+                templatesGrid.innerHTML = `
+                    <div class="col-span-full text-center py-8">
+                        <p class="text-gray-500 dark:text-gray-400">Aucun template trouvé</p>
+                        <button onclick="document.getElementById('new-template-btn').click()" 
+                                class="mt-2 text-blue-600 hover:text-blue-800">
+                            Créer votre premier template
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            templates.forEach(template => {
+                const templateCard = this.createTemplateCard(template);
+                templatesGrid.appendChild(templateCard);
+            });
+            
+            // Update count
+            const countElement = document.getElementById('templates-count');
+            if (countElement) {
+                countElement.textContent = `${templates.length} template(s)`;
+            }
+            
+        } catch (error) {
+            this.logger.error('Error loading templates for manager:', error);
+            this.showNotification(`Erreur lors du chargement: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * Load templates for sidebar
+     */
+    async loadTemplatesForSidebar() {
+        try {
+            const response = await fetch('/api/templates');
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            const templates = data.data || [];
+            
+            const recentList = document.getElementById('recent-templates-list');
+            if (!recentList) return;
+            
+            recentList.innerHTML = '';
+            
+            templates.slice(0, 10).forEach(template => {
+                const item = document.createElement('div');
+                item.className = 'template-item p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 cursor-pointer transition-colors duration-200 bg-white dark:bg-gray-700';
+                item.dataset.templateId = template.id;
+                
+                item.innerHTML = `
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-sm font-medium text-gray-900 dark:text-white truncate">${template.title}</h4>
+                        ${template.is_favorite ? '<i class="fas fa-star text-yellow-400 text-xs"></i>' : ''}
+                    </div>
+                    <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${new Date(template.created_at).toLocaleDateString()}</p>
+                `;
+                
+                recentList.appendChild(item);
+            });
+            
+        } catch (error) {
+            this.logger.error('Error loading templates for sidebar:', error);
+        }
+    }
+    
+    /**
+     * Create a template card for the manager view
+     */
+    createTemplateCard(template) {
+        const card = document.createElement('div');
+        card.className = 'template-card bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 p-4 hover:shadow-lg transition-all duration-200';
+        
+        card.innerHTML = `
+            <div class="flex items-start justify-between mb-2">
+                <h3 class="text-lg font-medium text-gray-900 dark:text-white truncate">${template.title}</h3>
+                <i class="fas fa-star ${template.is_favorite ? 'text-yellow-400' : 'text-gray-300'} cursor-pointer"></i>
+            </div>
+            <p class="text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">${template.description || 'Pas de description'}</p>
+            <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
+                <span>Créé le ${new Date(template.created_at).toLocaleDateString()}</span>
+                <span>${template.content ? template.content.length : 0} caractères</span>
+            </div>
+            <div class="flex space-x-2">
+                <button class="edit-btn flex-1 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors">
+                    <i class="fas fa-edit mr-1"></i> Éditer
+                </button>
+                <button class="delete-btn bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        `;
+        
+        return card;
+    }
+    
+    /**
+     * Show notification to user
+     */
+    showNotification(message, type = 'info') {
+        const container = document.getElementById('toast-container');
+        if (!container) return;
+        
+        const toast = document.createElement('div');
+        const bgColor = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+        
+        toast.className = `${bgColor} text-white px-4 py-2 rounded-lg shadow-lg transition-all duration-300 transform translate-x-full`;
+        toast.innerHTML = `
+            <div class="flex items-center justify-between">
+                <span>${message}</span>
+                <button onclick="this.parentElement.parentElement.remove()" class="ml-2 text-white opacity-70 hover:opacity-100">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+        `;
+        
+        container.appendChild(toast);
+        
+        // Animate in
+        setTimeout(() => {
+            toast.classList.remove('translate-x-full');
+        }, 100);
+        
+        // Auto remove after 5 seconds
+        setTimeout(() => {
+            toast.classList.add('translate-x-full');
+            setTimeout(() => toast.remove(), 300);
+        }, 5000);
     }
 
     /**
@@ -372,11 +726,14 @@ export class PromptEditorApp extends EventTarget {
         try {
             this.logger.debug('📊 Loading initial data...');
             
-            // Load templates and folders in parallel
+            // Load templates and folders in parallel, then populate UI
             await Promise.all([
-                templateManager.loadTemplates(),
-                templateManager.loadFolders()
-            ]);
+                templateManager.loadTemplates && templateManager.loadTemplates(),
+                templateManager.loadFolders && templateManager.loadFolders()
+            ].filter(Boolean));
+            
+            // Load templates for sidebar
+            await this.loadTemplatesForSidebar();
             
             const loadTime = performanceLogger.end(timerName);
             this.logger.info(`📊 Initial data loaded in ${loadTime.toFixed(2)}ms`);
@@ -781,20 +1138,30 @@ export function getApp() {
  * Auto-initialization when DOM is ready
  */
 document.addEventListener('DOMContentLoaded', async () => {
+    console.log('🎬 DOM loaded, starting application...');
     try {
-        logger.info('🎬 DOM loaded, starting application...');
-        await createApp();
-        logger.info('🎉 Application successfully started!');
-    } catch (error) {
-        logger.error('❌ Failed to start application:', error);
+        console.log('🔧 Creating app instance...');
+        const app = await createApp();
+        console.log('🎉 Application successfully started!', app);
         
-        // Show error to user
+        // Hide any error messages that might be showing
+        const existingError = document.querySelector('[style*="background:#f44336"]');
+        if (existingError) {
+            existingError.remove();
+        }
+        
+    } catch (error) {
+        console.error('❌ Failed to start application:', error);
+        console.error('❌ Error stack:', error.stack);
+        
+        // Show detailed error to user
         const errorDiv = document.createElement('div');
-        errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#f44336;color:white;padding:16px;border-radius:4px;z-index:10000;';
+        errorDiv.style.cssText = 'position:fixed;top:20px;right:20px;background:#f44336;color:white;padding:16px;border-radius:4px;z-index:10000;max-width:400px;';
         errorDiv.innerHTML = `
             <strong>Erreur d'initialisation</strong><br>
-            L'application n'a pas pu démarrer. Veuillez recharger la page.
-            <button onclick="location.reload()" style="margin-left:10px;background:white;color:#f44336;border:none;padding:4px 8px;border-radius:2px;cursor:pointer;">
+            ${error.message || 'L\'application n\'a pas pu démarrer.'}<br>
+            <small>Détails: ${error.stack ? error.stack.split('\n')[0] : 'Erreur inconnue'}</small><br>
+            <button onclick="location.reload()" style="margin-top:8px;background:white;color:#f44336;border:none;padding:4px 8px;border-radius:2px;cursor:pointer;">
                 Recharger
             </button>
         `;
