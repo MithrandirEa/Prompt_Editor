@@ -725,16 +725,24 @@ export class PromptEditorApp extends EventTarget {
             this.logger.debug('Performing full search for:', query);
             
             // Switch to management tab to show results
-            const managerTab = document.getElementById('management-tab');
+            const managerTab = document.getElementById('manager-tab');
             if (managerTab) {
+                this.logger.debug('Switching to manager tab');
                 managerTab.click();
+                // Wait for tab switch to complete
+                await new Promise(resolve => setTimeout(resolve, 100));
+            } else {
+                this.logger.warn('Manager tab not found');
             }
 
             // Show loading indicator
             this.showNotification('Recherche en cours...', 'info');
 
             // Perform search via API
-            const response = await fetch(`/api/templates?search=${encodeURIComponent(query)}`);
+            const searchUrl = `/api/templates?search=${encodeURIComponent(query)}`;
+            this.logger.debug('Fetching search results from:', searchUrl);
+            
+            const response = await fetch(searchUrl);
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
@@ -742,7 +750,7 @@ export class PromptEditorApp extends EventTarget {
             const data = await response.json();
             const searchResults = data.data || [];
 
-            this.logger.debug(`Search completed: ${searchResults.length} results found`);
+            this.logger.debug(`Search API returned ${searchResults.length} results`);
 
             // Display search results
             await this.displaySearchResults(searchResults, query);
@@ -759,8 +767,14 @@ export class PromptEditorApp extends EventTarget {
      * Display search results in the management view
      */
     async displaySearchResults(results, query) {
-        const templatesContainer = document.getElementById('templates-container');
-        if (!templatesContainer) return;
+        const templatesContainer = document.getElementById('templates-grid');
+        if (!templatesContainer) {
+            this.logger.error('Templates grid not found - unable to display search results');
+            this.showNotification('Erreur: Zone d\'affichage non trouvée', 'error');
+            return;
+        }
+
+        this.logger.debug(`Displaying ${results.length} search results for query: "${query}"`);
 
         // Clear current content
         templatesContainer.innerHTML = '';
