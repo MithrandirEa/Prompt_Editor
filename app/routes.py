@@ -71,6 +71,7 @@ def get_templates():
         folder_id = request.args.get('folder_id', type=int)
         search_query = request.args.get('search', '').strip()
         favorites_only = request.args.get('favorites', '').lower() == 'true'
+        recent_only = request.args.get('recent', '').lower() == 'true'
         
         query = Template.query
         
@@ -81,6 +82,8 @@ def get_templates():
             templates = Template.search(search_query)
         elif favorites_only:
             templates = Template.get_favorites()
+        elif recent_only:
+            templates = query.order_by(Template.updated_at.desc()).limit(10).all()
         else:
             templates = query.order_by(Template.updated_at.desc()).all()
         
@@ -183,7 +186,7 @@ def get_template(template_id):
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 
-@main.route('/api/templates/<int:template_id>', methods=['PUT'])
+@main.route('/api/templates/<int:template_id>', methods=['PUT', 'PATCH'])
 def update_template(template_id):
     """
     Update existing template.
@@ -494,6 +497,142 @@ def update_folder(folder_id):
         db.session.rollback()
         error_msg = f'Error updating folder {folder_id}: {str(e)}'
         current_app.logger.error(error_msg)
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/folders/<int:folder_id>', methods=['DELETE'])
+def delete_folder(folder_id):
+    """
+    Delete existing folder and optionally move templates to another folder.
+    
+    Parameters
+    ----------
+    folder_id : int
+        Folder ID
+    
+    Query Parameters
+    ----------------
+    move_to : int, optional
+        ID of folder to move templates to (if not provided, templates are
+        orphaned)
+    
+    Returns
+    -------
+    JSON
+        Success message
+    """
+    try:
+        folder = Folder.query.get_or_404(folder_id)
+        move_to_id = request.args.get('move_to', type=int)
+        
+        # Check if folder has templates
+        templates = Template.query.filter_by(folder_id=folder_id).all()
+        
+        # Move templates if specified
+        if move_to_id and templates:
+            move_to_folder = Folder.query.get(move_to_id)
+            if not move_to_folder:
+                raise BadRequest('Target folder not found')
+            
+            for template in templates:
+                template.folder_id = move_to_id
+        elif templates:
+            # Orphan templates (move to root)
+            for template in templates:
+                template.folder_id = None
+        
+        # Check for subfolders
+        subfolders = Folder.query.filter_by(parent_id=folder_id).all()
+        if subfolders:
+            # Move subfolders to parent or root
+            for subfolder in subfolders:
+                subfolder.parent_id = folder.parent_id
+        
+        # Delete folder from filesystem
+        try:
+            parent_name = folder.parent.name if folder.parent else None
+            delete_folder_from_disk(folder.name, parent_name)
+        except Exception as fs_error:
+            current_app.logger.warning(
+                f'Error deleting folder from disk: {fs_error}'
+            )
+        
+        # Delete from database
+        folder_name = folder.name
+        db.session.delete(folder)
+        db.session.commit()
+        
+        current_app.logger.info(f'Deleted folder: {folder_name}')
+        return jsonify({
+            'status': 'success',
+            'message': f'Folder "{folder_name}" deleted successfully'
+        })
+        
+    except BadRequest as e:
+        return jsonify({'status': 'error', 'message': str(e)}), 400
+    except NotFound:
+        return jsonify({'status': 'error', 'message': 'Folder not found'}), 404
+    except Exception as e:
+        db.session.rollback()
+        current_app.logger.error(f'Error deleting folder: {str(e)}')
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/folders/<int:folder_id>/templates', methods=['GET'])
+def get_folder_templates(folder_id):
+    """
+    Get templates for a specific folder.
+    
+    Parameters
+    ----------
+    folder_id : int
+        Folder ID
+    
+    Returns
+    -------
+    JSON
+        List of templates in the folder
+    """
+    try:
+        folder = Folder.query.get_or_404(folder_id)
+        
+        # Get templates in this folder
+        templates = Template.query.filter_by(folder_id=folder_id).all()
+        
+        return jsonify({
+            'status': 'success',
+            'data': [template.to_dict() for template in templates],
+            'folder': folder.to_dict()
+        })
+        
+    except NotFound:
+        return jsonify({'status': 'error', 'message': 'Folder not found'}), 404
+    except Exception as e:
+        current_app.logger.error(f'Error getting folder templates: {str(e)}')
+        return jsonify({'status': 'error', 'message': str(e)}), 500
+
+
+@main.route('/api/sync/filesystem', methods=['POST'])
+def sync_from_filesystem():
+    """
+    Synchronize templates from filesystem to database.
+    
+    Returns
+    -------
+    JSON
+        Sync result message
+    """
+    try:
+        from app.utils.filesystem import sync_filesystem_to_database
+        sync_filesystem_to_database()
+        
+        return jsonify({
+            'status': 'success',
+            'message': 'Templates synchronized from filesystem'
+        })
+        
+    except Exception as e:
+        current_app.logger.error(f'Error syncing from filesystem: {str(e)}')
         return jsonify({'status': 'error', 'message': str(e)}), 500
 
 

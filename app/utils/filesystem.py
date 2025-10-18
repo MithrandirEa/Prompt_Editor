@@ -298,3 +298,96 @@ def get_folder_structure() -> dict:
         return structure
     
     return scan_directory(templates_dir)
+
+
+def sync_filesystem_to_database():
+    """
+    Synchronize file system content to database.
+    Import existing templates and folders from the file system.
+    """
+    from app.models import Template, Folder, db
+    
+    templates_dir = get_user_templates_dir()
+    if not templates_dir.exists():
+        return
+    
+    def import_folder(folder_path: Path,
+                      parent_id: Optional[int] = None) -> Optional[int]:
+        """Import a folder and return its database ID"""
+        if not folder_path.is_dir():
+            return None
+            
+        folder_name = folder_path.name
+        
+        # Check if folder already exists
+        existing_folder = Folder.query.filter_by(
+            name=folder_name, parent_id=parent_id
+        ).first()
+        
+        if not existing_folder:
+            # Create new folder
+            folder = Folder(name=folder_name, parent_id=parent_id)
+            db.session.add(folder)
+            db.session.flush()  # Get the ID
+            folder_id = folder.id
+        else:
+            folder_id = existing_folder.id
+        
+        return folder_id
+    
+    def import_template(file_path: Path, folder_id: Optional[int] = None):
+        """Import a template file"""
+        if not file_path.suffix == '.md':
+            return
+            
+        template_title = file_path.stem
+        
+        # Check if template already exists
+        existing_template = Template.query.filter_by(
+            title=template_title
+        ).first()
+        
+        if existing_template:
+            return  # Skip existing templates
+        
+        try:
+            # Read file content
+            content = file_path.read_text(encoding='utf-8')
+            
+            # Create new template
+            template = Template(
+                title=template_title,
+                content=content,
+                folder_id=folder_id
+            )
+            db.session.add(template)
+            
+        except Exception as e:
+            print(f"Error importing template {file_path}: {e}")
+    
+    def scan_and_import(current_path: Path, 
+                       parent_folder_id: Optional[int] = None):
+        """Recursively scan and import folders and templates"""
+        
+        # Import templates in current directory
+        for item in current_path.iterdir():
+            if item.is_file() and item.suffix == '.md':
+                import_template(item, parent_folder_id)
+        
+        # Import subdirectories
+        for item in current_path.iterdir():
+            if item.is_dir():
+                folder_id = import_folder(item, parent_folder_id)
+                if folder_id:
+                    scan_and_import(item, folder_id)
+    
+    try:
+        # Start import from root templates directory
+        scan_and_import(templates_dir)
+        db.session.commit()
+        print(f"Successfully imported templates from {templates_dir}")
+        
+    except Exception as e:
+        db.session.rollback()
+        print(f"Error during filesystem import: {e}")
+        raise

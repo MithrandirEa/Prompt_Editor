@@ -74,6 +74,9 @@ export class PromptEditorApp extends EventTarget {
             lastActivity: null
         };
         
+        // Drag & Drop state
+        this.draggedTemplate = null;
+        
         // Performance tracking
         this.metrics = {
             startupTime: 0,
@@ -401,8 +404,9 @@ export class PromptEditorApp extends EventTarget {
                 managerContent.classList.remove('hidden');
                 editorContent.classList.add('hidden');
                 
-                // Load templates for manager view
+                // Load templates for manager view and folders for navigation
                 await this.loadTemplatesForManager();
+                await this.loadFoldersForNavigation();
             });
         }
         
@@ -448,6 +452,15 @@ export class PromptEditorApp extends EventTarget {
             });
         }
         
+        // App title click - create new template
+        const appTitle = document.getElementById('app-title');
+        if (appTitle) {
+            appTitle.addEventListener('click', () => {
+                this.logger.debug('App title clicked - creating new template');
+                this.createNewTemplate();
+            });
+        }
+        
         // Navigation buttons
         const navBackBtn = document.getElementById('nav-back-btn');
         const navForwardBtn = document.getElementById('nav-forward-btn');
@@ -467,6 +480,14 @@ export class PromptEditorApp extends EventTarget {
         if (newFolderBtn) {
             newFolderBtn.addEventListener('click', () => {
                 this.showNewFolderModal();
+            });
+        }
+        
+        // Sync from filesystem button
+        const syncFilesystemBtn = document.getElementById('sync-from-filesystem');
+        if (syncFilesystemBtn) {
+            syncFilesystemBtn.addEventListener('click', async () => {
+                await this.syncFromFilesystem();
             });
         }
         
@@ -508,8 +529,142 @@ export class PromptEditorApp extends EventTarget {
                 this.updateMarkdownPreview();
             });
         }
+
+        // Sidebar tab buttons (Recent/Favorites)
+        this.setupSidebarTabs();
+        
+        // Template items click handlers
+        this.setupTemplateItemsHandlers();
+
+        // Resize handle for navigation panel
+        this.setupResizeHandle();
         
         this.logger.info('🎯 Critical DOM event listeners configured');
+    }
+    
+    /**
+     * Setup sidebar tabs (Recent/Favorites)
+     */
+    setupSidebarTabs() {
+        const showRecentBtn = document.getElementById('show-recent');
+        const showFavoritesBtn = document.getElementById('show-favorites');
+        const recentList = document.getElementById('recent-templates-list');
+        const favoritesList = document.getElementById('favorite-templates-list');
+        
+        if (showRecentBtn && showFavoritesBtn && recentList && favoritesList) {
+            showRecentBtn.addEventListener('click', () => {
+                this.logger.debug('Show recent templates clicked');
+                
+                // Update tab visual state
+                showRecentBtn.classList.add('sidebar-tab-active', 'bg-gray-100', 'dark:bg-gray-700');
+                showFavoritesBtn.classList.remove('sidebar-tab-active', 'bg-gray-100', 'dark:bg-gray-700');
+                
+                // Show/hide content
+                recentList.classList.remove('hidden');
+                favoritesList.classList.add('hidden');
+                
+                this.loadRecentTemplatesForSidebar();
+            });
+            
+            showFavoritesBtn.addEventListener('click', () => {
+                this.logger.debug('Show favorite templates clicked');
+                
+                // Update tab visual state
+                showFavoritesBtn.classList.add('sidebar-tab-active', 'bg-gray-100', 'dark:bg-gray-700');
+                showRecentBtn.classList.remove('sidebar-tab-active', 'bg-gray-100', 'dark:bg-gray-700');
+                
+                // Show/hide content
+                favoritesList.classList.remove('hidden');
+                recentList.classList.add('hidden');
+                
+                this.loadFavoriteTemplatesForSidebar();
+            });
+        }
+        
+        this.logger.debug('Sidebar tabs configured');
+    }
+    
+    /**
+     * Setup template items click handlers
+     */
+    setupTemplateItemsHandlers() {
+        // Use event delegation since template items may be added dynamically
+        document.addEventListener('click', async (e) => {
+            const templateItem = e.target.closest('.template-item');
+            if (templateItem) {
+                const templateId = templateItem.dataset.templateId;
+                if (templateId) {
+                    this.logger.debug(`Template item clicked: ${templateId}`);
+                    await this.loadTemplateInEditor(templateId);
+                }
+            }
+        });
+        
+        this.logger.debug('Template items handlers configured');
+    }
+    
+    /**
+     * Setup resize handle for navigation panel
+     */
+    setupResizeHandle() {
+        const resizeHandle = document.getElementById('resize-handle');
+        const navigationPanel = document.getElementById('navigation-panel');
+        
+        if (!resizeHandle || !navigationPanel) {
+            this.logger.debug('Resize handle or navigation panel not found');
+            return;
+        }
+
+        let isResizing = false;
+        let startX = 0;
+        let startWidth = 0;
+
+        // Mouse down on resize handle
+        resizeHandle.addEventListener('mousedown', (e) => {
+            isResizing = true;
+            startX = e.clientX;
+            startWidth = parseInt(document.defaultView.getComputedStyle(navigationPanel).width, 10);
+            
+            // Add visual feedback
+            resizeHandle.style.backgroundColor = '#3b82f6';
+            document.body.style.cursor = 'col-resize';
+            document.body.style.userSelect = 'none';
+            
+            e.preventDefault();
+        });
+
+        // Mouse move (global)
+        document.addEventListener('mousemove', (e) => {
+            if (!isResizing) return;
+
+            const dx = e.clientX - startX;
+            const newWidth = startWidth + dx;
+            const minWidth = 200;
+            const maxWidth = 600;
+
+            // Constrain width
+            const constrainedWidth = Math.max(minWidth, Math.min(maxWidth, newWidth));
+            
+            navigationPanel.style.width = constrainedWidth + 'px';
+            
+            e.preventDefault();
+        });
+
+        // Mouse up (global)
+        document.addEventListener('mouseup', () => {
+            if (isResizing) {
+                isResizing = false;
+                
+                // Remove visual feedback
+                resizeHandle.style.backgroundColor = '';
+                document.body.style.cursor = '';
+                document.body.style.userSelect = '';
+                
+                this.logger.debug(`Navigation panel resized to: ${navigationPanel.style.width}`);
+            }
+        });
+
+        this.logger.debug('Resize handle configured');
     }
     
     /**
@@ -577,7 +732,7 @@ export class PromptEditorApp extends EventTarget {
             this.showNotification('Template sauvegardé avec succès !', 'success');
             
             // Reload templates in sidebar
-            await this.loadTemplatesForSidebar();
+            await this.refreshSidebar();
             
         } catch (error) {
             this.logger.error('Error saving template:', error);
@@ -674,6 +829,190 @@ export class PromptEditorApp extends EventTarget {
             this.logger.error('Error loading templates for sidebar:', error);
         }
     }
+
+    /**
+     * Load recent templates for sidebar
+     */
+    async loadRecentTemplatesForSidebar() {
+        try {
+            this.logger.debug('Loading recent templates for sidebar...');
+            
+            const response = await fetch('/api/templates?recent=true');
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            const templates = data.data || [];
+            
+            const recentList = document.getElementById('recent-templates-list');
+            if (!recentList) return;
+            
+            recentList.innerHTML = '';
+            
+            if (templates.length === 0) {
+                recentList.innerHTML = `
+                    <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <i class="fas fa-clock text-2xl mb-2"></i>
+                        <p class="text-sm">Aucun template récent</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            templates.slice(0, 10).forEach(template => {
+                const item = this.createSidebarTemplateItem(template);
+                recentList.appendChild(item);
+            });
+            
+        } catch (error) {
+            this.logger.error('Error loading recent templates for sidebar:', error);
+        }
+    }
+
+    /**
+     * Load favorite templates for sidebar
+     */
+    async loadFavoriteTemplatesForSidebar() {
+        try {
+            this.logger.debug('Loading favorite templates for sidebar...');
+            
+            const response = await fetch('/api/templates?favorites=true');
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            const templates = data.data || [];
+            
+            const favoritesList = document.getElementById('favorite-templates-list');
+            if (!favoritesList) return;
+            
+            favoritesList.innerHTML = '';
+            
+            if (templates.length === 0) {
+                favoritesList.innerHTML = `
+                    <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <i class="fas fa-star text-2xl mb-2"></i>
+                        <p class="text-sm">Aucun template favori</p>
+                        <p class="text-xs mt-1">Cliquez sur ⭐ pour ajouter des favoris</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            templates.forEach(template => {
+                const item = this.createSidebarTemplateItem(template);
+                favoritesList.appendChild(item);
+            });
+            
+        } catch (error) {
+            this.logger.error('Error loading favorite templates for sidebar:', error);
+        }
+    }
+
+    /**
+     * Create sidebar template item
+     */
+    createSidebarTemplateItem(template) {
+        const item = document.createElement('div');
+        item.className = 'template-item p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 cursor-pointer transition-colors duration-200 bg-white dark:bg-gray-700 group';
+        item.dataset.templateId = template.id;
+        
+        item.innerHTML = `
+            <div class="flex items-center justify-between">
+                <h4 class="text-sm font-medium text-gray-900 dark:text-white truncate pr-2">${template.title}</h4>
+                <div class="flex items-center space-x-1">
+                    ${template.is_favorite ? '<i class="fas fa-star text-yellow-400 text-xs"></i>' : ''}
+                    <i class="fas fa-chevron-right text-gray-300 group-hover:text-blue-500 text-xs transition-colors"></i>
+                </div>
+            </div>
+            <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">${new Date(template.created_at).toLocaleDateString()}</p>
+            <div class="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                ${template.content ? template.content.length : 0} caractères
+            </div>
+        `;
+        
+        return item;
+    }
+
+    /**
+     * Load template in editor
+     */
+    async loadTemplateInEditor(templateId) {
+        try {
+            this.logger.debug(`Loading template ${templateId} in editor...`);
+            
+            const response = await fetch(`/api/templates/${templateId}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const template = data.data;
+            
+            // Load template data in editor
+            const titleInput = document.getElementById('template-title');
+            const contentArea = document.getElementById('markdown-editor');
+            
+            if (titleInput) titleInput.value = template.title || '';
+            if (contentArea) contentArea.value = template.content || '';
+            
+            // Update markdown preview
+            this.updateMarkdownPreview();
+            
+            // Visual feedback that template is loaded
+            this.showNotification(`Template "${template.title}" chargé`, 'success');
+            
+            // Store current template ID for save operations
+            this.currentTemplateId = templateId;
+            
+        } catch (error) {
+            this.logger.error('Error loading template in editor:', error);
+            this.showNotification(`Erreur lors du chargement: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Create new template - clear editor and switch to editor tab
+     */
+    createNewTemplate() {
+        this.logger.debug('Creating new template...');
+        
+        try {
+            // Clear the editor
+            const titleInput = document.getElementById('template-title');
+            const contentArea = document.getElementById('markdown-editor');
+            
+            if (titleInput) {
+                titleInput.value = '';
+                titleInput.placeholder = 'Titre du template...';
+            }
+            if (contentArea) {
+                contentArea.value = '';
+                contentArea.placeholder = 'Commencez à écrire votre template ici...';
+            }
+            
+            // Clear current template ID
+            this.currentTemplateId = null;
+            
+            // Update markdown preview to be empty
+            this.updateMarkdownPreview();
+            
+            // Switch to editor tab
+            const editorTab = document.getElementById('editor-tab');
+            if (editorTab) {
+                editorTab.click();
+            }
+            
+            // Focus on title input
+            if (titleInput) {
+                setTimeout(() => titleInput.focus(), 100);
+            }
+            
+            this.showNotification('Nouveau template créé', 'success');
+            
+        } catch (error) {
+            this.logger.error('Error creating new template:', error);
+            this.showNotification(`Erreur lors de la création: ${error.message}`, 'error');
+        }
+    }
     
     /**
      * Create a template card for the manager view
@@ -681,11 +1020,13 @@ export class PromptEditorApp extends EventTarget {
     createTemplateCard(template) {
         const card = document.createElement('div');
         card.className = 'template-card bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-600 p-4 hover:shadow-lg transition-all duration-200';
+        card.draggable = true;
+        card.dataset.templateId = template.id;
         
         card.innerHTML = `
             <div class="flex items-start justify-between mb-2">
                 <h3 class="text-lg font-medium text-gray-900 dark:text-white truncate">${template.title}</h3>
-                <i class="fas fa-star ${template.is_favorite ? 'text-yellow-400' : 'text-gray-300'} cursor-pointer"></i>
+                <i class="fas fa-star ${template.is_favorite ? 'text-yellow-400' : 'text-gray-300'} cursor-pointer star-btn" data-template-id="${template.id}"></i>
             </div>
             <p class="text-sm text-gray-600 dark:text-gray-300 mb-3 line-clamp-2">${template.description || 'Pas de description'}</p>
             <div class="flex items-center justify-between text-xs text-gray-500 dark:text-gray-400 mb-3">
@@ -693,16 +1034,65 @@ export class PromptEditorApp extends EventTarget {
                 <span>${template.content ? template.content.length : 0} caractères</span>
             </div>
             <div class="flex space-x-2">
-                <button class="edit-btn flex-1 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors">
+                <button class="edit-btn flex-1 bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors" data-template-id="${template.id}">
                     <i class="fas fa-edit mr-1"></i> Éditer
                 </button>
-                <button class="delete-btn bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors">
+                <button class="delete-btn bg-red-600 text-white px-3 py-1 rounded text-sm hover:bg-red-700 transition-colors" data-template-id="${template.id}">
                     <i class="fas fa-trash"></i>
                 </button>
             </div>
         `;
         
+        // Add event listeners for interactions
+        this.attachTemplateCardEvents(card, template);
+        
         return card;
+    }
+
+    /**
+     * Attach event listeners to template card
+     */
+    attachTemplateCardEvents(card, template) {
+        // Drag events
+        card.addEventListener('dragstart', (e) => {
+            this.handleDragStart(e, template);
+        });
+        
+        card.addEventListener('dragend', (e) => {
+            this.handleDragEnd(e);
+        });
+
+        // Star button (favorite toggle)
+        const starBtn = card.querySelector('.star-btn');
+        if (starBtn) {
+            starBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await this.toggleTemplateFavorite(template.id, !template.is_favorite);
+            });
+        }
+
+        // Edit button
+        const editBtn = card.querySelector('.edit-btn');
+        if (editBtn) {
+            editBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await this.editTemplate(template.id);
+            });
+        }
+
+        // Delete button
+        const deleteBtn = card.querySelector('.delete-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await this.deleteTemplate(template.id, template.title);
+            });
+        }
+
+        // Card click (preview/open)
+        card.addEventListener('click', () => {
+            this.previewTemplate(template);
+        });
     }
     
     /**
@@ -804,8 +1194,8 @@ export class PromptEditorApp extends EventTarget {
                 templateManager.loadFolders && templateManager.loadFolders()
             ].filter(Boolean));
             
-            // Load templates for sidebar
-            await this.loadTemplatesForSidebar();
+            // Load templates for sidebar (default to recent)
+            await this.loadRecentTemplatesForSidebar();
             
             // Load folders for navigation panel
             await this.loadFoldersForNavigation();
@@ -950,6 +1340,152 @@ export class PromptEditorApp extends EventTarget {
      */
     updateActivity() {
         this.state.lastActivity = new Date().toISOString();
+    }
+
+    /**
+     * Toggle template favorite status
+     */
+    async toggleTemplateFavorite(templateId, isFavorite) {
+        try {
+            this.logger.debug(`Toggling favorite for template ${templateId}: ${isFavorite}`);
+            
+            const response = await fetch(`/api/templates/${templateId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ is_favorite: isFavorite })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            this.showNotification(
+                isFavorite ? 'Template ajouté aux favoris' : 'Template retiré des favoris', 
+                'success'
+            );
+            
+            // Reload templates to reflect changes
+            await this.loadTemplatesForManager();
+            
+            // Refresh sidebar tabs to show updated favorites/recent
+            await this.refreshSidebar();
+            
+        } catch (error) {
+            this.logger.error('Error toggling favorite:', error);
+            this.showNotification(`Erreur: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Refresh sidebar content based on current tab
+     */
+    async refreshSidebar() {
+        try {
+            const showRecentBtn = document.getElementById('show-recent');
+            const showFavoritesBtn = document.getElementById('show-favorites');
+            
+            // Check which tab is currently active
+            if (showRecentBtn && showRecentBtn.classList.contains('sidebar-tab-active')) {
+                await this.loadRecentTemplatesForSidebar();
+            } else if (showFavoritesBtn && showFavoritesBtn.classList.contains('sidebar-tab-active')) {
+                await this.loadFavoriteTemplatesForSidebar();
+            } else {
+                // Default to recent
+                await this.loadRecentTemplatesForSidebar();
+            }
+            
+        } catch (error) {
+            this.logger.error('Error refreshing sidebar:', error);
+        }
+    }
+
+    /**
+     * Edit template (switch to editor tab and load template)
+     */
+    async editTemplate(templateId) {
+        try {
+            this.logger.debug(`Editing template ${templateId}`);
+            
+            const response = await fetch(`/api/templates/${templateId}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const data = await response.json();
+            const template = data.data;
+            
+            // Load template in editor
+            const titleInput = document.getElementById('template-title');
+            const contentArea = document.getElementById('markdown-editor');
+            
+            if (titleInput) titleInput.value = template.title;
+            if (contentArea) contentArea.value = template.content || '';
+            
+            // Switch to editor tab
+            const editorTab = document.getElementById('editor-tab');
+            if (editorTab) {
+                editorTab.click();
+            }
+            
+            this.showNotification('Template chargé dans l\'éditeur', 'success');
+            
+        } catch (error) {
+            this.logger.error('Error editing template:', error);
+            this.showNotification(`Erreur lors du chargement: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Delete template with confirmation
+     */
+    async deleteTemplate(templateId, templateTitle) {
+        try {
+            const confirmed = confirm(`Êtes-vous sûr de vouloir supprimer le template "${templateTitle}" ?\n\nCette action est irréversible.`);
+            
+            if (!confirmed) return;
+            
+            this.logger.debug(`Deleting template ${templateId}`);
+            
+            const response = await fetch(`/api/templates/${templateId}`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            this.showNotification('Template supprimé avec succès', 'success');
+            
+            // Reload templates and sidebar
+            await this.loadTemplatesForManager();
+            await this.refreshSidebar();
+            
+        } catch (error) {
+            this.logger.error('Error deleting template:', error);
+            this.showNotification(`Erreur lors de la suppression: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Preview template (could open in modal or show details)
+     */
+    previewTemplate(template) {
+        this.logger.debug(`Previewing template: ${template.title}`);
+        
+        // For now, just show template info
+        const info = `
+Titre: ${template.title}
+Description: ${template.description || 'Aucune'}
+Créé le: ${new Date(template.created_at).toLocaleDateString()}
+Caractères: ${template.content ? template.content.length : 0}
+Favori: ${template.is_favorite ? 'Oui' : 'Non'}
+        `.trim();
+        
+        alert(info);
+        
+        // TODO: Implement proper preview modal
     }
 
     /**
@@ -1297,17 +1833,22 @@ export class PromptEditorApp extends EventTarget {
             if (!folderTree) return;
             
             folderTree.innerHTML = '';
+
+            // Add "All templates" option at the top
+            const allTemplatesElement = this.createAllTemplatesElement();
+            folderTree.appendChild(allTemplatesElement);
             
             if (folders.length === 0) {
-                folderTree.innerHTML = `
-                    <div class="text-center py-8 text-gray-500 dark:text-gray-400">
-                        <i class="fas fa-folder-open text-2xl mb-2"></i>
-                        <p>Aucun dossier</p>
-                        <button onclick="app.showNewFolderModal()" class="mt-2 text-blue-600 hover:text-blue-800 text-sm">
-                            Créer votre premier dossier
-                        </button>
-                    </div>
+                const emptyMessage = document.createElement('div');
+                emptyMessage.className = 'text-center py-8 text-gray-500 dark:text-gray-400';
+                emptyMessage.innerHTML = `
+                    <i class="fas fa-folder-open text-2xl mb-2"></i>
+                    <p>Aucun dossier</p>
+                    <button onclick="app.showNewFolderModal()" class="mt-2 text-blue-600 hover:text-blue-800 text-sm">
+                        Créer votre premier dossier
+                    </button>
                 `;
+                folderTree.appendChild(emptyMessage);
                 return;
             }
             
@@ -1320,6 +1861,35 @@ export class PromptEditorApp extends EventTarget {
             this.logger.error('Error loading folders:', error);
         }
     }
+
+    /**
+     * Create "All templates" element
+     */
+    createAllTemplatesElement() {
+        const element = document.createElement('div');
+        element.className = 'folder-item group all-templates-item mb-2';
+        element.dataset.folderId = 'all';
+        
+        element.innerHTML = `
+            <div class="folder-content flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 transition-colors">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-th-large text-blue-600 dark:text-blue-400"></i>
+                    <span class="text-sm font-medium text-blue-900 dark:text-blue-100">Tous les templates</span>
+                </div>
+                <i class="fas fa-chevron-right text-blue-600 dark:text-blue-400"></i>
+            </div>
+        `;
+        
+        // Add click event
+        element.addEventListener('click', () => {
+            this.selectAllTemplates();
+        });
+        
+        // Add drag & drop events for root folder
+        this.attachRootFolderDragDropEvents(element);
+        
+        return element;
+    }
     
     /**
      * Create folder element for navigation
@@ -1330,20 +1900,181 @@ export class PromptEditorApp extends EventTarget {
         element.dataset.folderId = folder.id;
         
         element.innerHTML = `
-            <div class="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+            <div class="folder-content flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors">
                 <div class="flex items-center space-x-2">
-                    <i class="fas fa-folder text-blue-600 dark:text-blue-400"></i>
+                    <i class="fas fa-folder text-amber-600 dark:text-amber-400"></i>
                     <span class="text-sm font-medium text-gray-900 dark:text-white">${folder.name}</span>
                 </div>
-                <span class="text-xs text-gray-500 dark:text-gray-400">${folder.template_count || 0}</span>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">${folder.template_count || 0}</span>
+                    <button class="delete-folder-btn opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 p-1 transition-all" data-folder-id="${folder.id}" title="Supprimer le dossier">
+                        <i class="fas fa-trash text-xs"></i>
+                    </button>
+                    <i class="fas fa-chevron-right text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-300 transition-colors"></i>
+                </div>
             </div>
         `;
         
-        element.addEventListener('click', () => {
-            this.selectFolder(folder.id, folder.name);
+        // Add drag & drop events
+        this.attachFolderDragDropEvents(element, folder);
+        
+        // Add click event for folder selection
+        const folderContent = element.querySelector('.folder-content');
+        folderContent.addEventListener('click', (e) => {
+            // Don't trigger if clicking on delete button
+            if (!e.target.closest('.delete-folder-btn')) {
+                this.selectFolder(folder.id, folder.name);
+            }
         });
         
+        // Add delete event
+        const deleteBtn = element.querySelector('.delete-folder-btn');
+        if (deleteBtn) {
+            deleteBtn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                await this.deleteFolder(folder.id, folder.name);
+            });
+        }
+        
         return element;
+    }
+    
+    /**
+     * Delete folder with confirmation
+     */
+    async deleteFolder(folderId, folderName) {
+        const confirmed = confirm(`Êtes-vous sûr de vouloir supprimer le dossier "${folderName}" ? Les templates seront déplacés vers la racine.`);
+        if (!confirmed) return;
+        
+        try {
+            const response = await fetch(`/api/folders/${folderId}`, {
+                method: 'DELETE'
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Erreur lors de la suppression');
+            }
+            
+            this.showNotification(`Dossier "${folderName}" supprimé avec succès`, 'success');
+            
+            // Refresh folders and templates
+            await this.loadFoldersForNavigation();
+            await this.loadTemplatesForManager();
+            
+        } catch (error) {
+            this.logger.error('Error deleting folder:', error);
+            this.showNotification(`Erreur: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * Handle drag start
+     */
+    handleDragStart(e, template) {
+        this.draggedTemplate = template;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/html', e.target.outerHTML);
+        e.target.classList.add('dragging');
+    }
+    
+    /**
+     * Handle drag end
+     */
+    handleDragEnd(e) {
+        e.target.classList.remove('dragging');
+        this.draggedTemplate = null;
+        
+        // Remove drag-over class from all folders
+        document.querySelectorAll('.folder-item').forEach(folder => {
+            folder.classList.remove('drag-over');
+        });
+    }
+    
+    /**
+     * Attach drag & drop events to folder element
+     */
+    attachFolderDragDropEvents(element, folder) {
+        element.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            element.classList.add('drag-over');
+        });
+        
+        element.addEventListener('dragleave', (e) => {
+            // Only remove drag-over if we're really leaving the folder
+            if (!element.contains(e.relatedTarget)) {
+                element.classList.remove('drag-over');
+            }
+        });
+        
+        element.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            element.classList.remove('drag-over');
+            
+            if (this.draggedTemplate) {
+                await this.moveTemplateToFolder(this.draggedTemplate.id, folder.id);
+            }
+        });
+    }
+    
+    /**
+     * Move template to folder
+     */
+    async moveTemplateToFolder(templateId, folderId) {
+        try {
+            const response = await fetch(`/api/templates/${templateId}`, {
+                method: 'PATCH',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    folder_id: folderId
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Erreur lors du déplacement');
+            }
+            
+            this.showNotification('Template déplacé avec succès', 'success');
+            
+            // Refresh templates and folders
+            await this.loadTemplatesForManager();
+            await this.loadFoldersForNavigation();
+            
+        } catch (error) {
+            this.logger.error('Error moving template:', error);
+            this.showNotification(`Erreur: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * Attach drag & drop events to root folder element (All templates)
+     */
+    attachRootFolderDragDropEvents(element) {
+        element.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            element.classList.add('drag-over');
+        });
+        
+        element.addEventListener('dragleave', (e) => {
+            // Only remove drag-over if we're really leaving the folder
+            if (!element.contains(e.relatedTarget)) {
+                element.classList.remove('drag-over');
+            }
+        });
+        
+        element.addEventListener('drop', async (e) => {
+            e.preventDefault();
+            element.classList.remove('drag-over');
+            
+            if (this.draggedTemplate) {
+                await this.moveTemplateToFolder(this.draggedTemplate.id, null);
+            }
+        });
     }
     
     /**
@@ -1353,17 +2084,20 @@ export class PromptEditorApp extends EventTarget {
         this.logger.debug(`Selecting folder: ${folderName} (${folderId})`);
         
         try {
+            // Update visual selection
+            this.updateFolderSelection(folderId);
+            
+            // Update title and path
+            const titleElement = document.getElementById('current-folder-title');
+            const pathElement = document.getElementById('current-folder-path');
+            if (titleElement) titleElement.textContent = folderName;
+            if (pathElement) pathElement.textContent = `Racine > ${folderName}`;
+            
             const response = await fetch(`/api/folders/${folderId}/templates`);
             if (!response.ok) return;
             
             const data = await response.json();
             const templates = data.data || [];
-            
-            // Update folder title
-            const titleElement = document.getElementById('current-folder-title');
-            if (titleElement) {
-                titleElement.textContent = folderName;
-            }
             
             // Update templates grid
             const templatesGrid = document.getElementById('templates-grid');
@@ -1374,9 +2108,19 @@ export class PromptEditorApp extends EventTarget {
             if (templates.length === 0) {
                 templatesGrid.innerHTML = `
                     <div class="col-span-full text-center py-8">
-                        <p class="text-gray-500 dark:text-gray-400">Aucun template dans ce dossier</p>
+                        <i class="fas fa-folder-open text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
+                        <p class="text-gray-500 dark:text-gray-400 mb-2">Ce dossier est vide</p>
+                        <button onclick="document.getElementById('new-template-btn').click()" 
+                                class="text-blue-600 hover:text-blue-800 text-sm">
+                            Ajouter un template à ce dossier
+                        </button>
                     </div>
                 `;
+                
+                // Update count
+                const countElement = document.getElementById('templates-count');
+                if (countElement) countElement.textContent = '0 template(s)';
+                
                 return;
             }
             
@@ -1393,9 +2137,47 @@ export class PromptEditorApp extends EventTarget {
             
         } catch (error) {
             this.logger.error('Error loading folder templates:', error);
+            this.showNotification(`Erreur lors du chargement du dossier: ${error.message}`, 'error');
         }
     }
-    
+
+    /**
+     * Update visual selection of folders
+     */
+    updateFolderSelection(selectedFolderId) {
+        // Remove previous selection
+        document.querySelectorAll('.folder-item').forEach(item => {
+            const div = item.querySelector('div');
+            div.classList.remove('bg-blue-100', 'dark:bg-blue-800', 'border', 'border-blue-300', 'dark:border-blue-600');
+        });
+        
+        // Add selection to current folder
+        const selectedItem = document.querySelector(`[data-folder-id="${selectedFolderId}"]`);
+        if (selectedItem) {
+            const div = selectedItem.querySelector('div');
+            div.classList.add('bg-blue-100', 'dark:bg-blue-800', 'border', 'border-blue-300', 'dark:border-blue-600');
+        }
+    }
+
+    /**
+     * Select "All templates" view
+     */
+    async selectAllTemplates() {
+        this.logger.debug('Selecting all templates view');
+        
+        // Update visual selection
+        this.updateFolderSelection('all');
+        
+        // Update title
+        const titleElement = document.getElementById('current-folder-title');
+        const pathElement = document.getElementById('current-folder-path');
+        if (titleElement) titleElement.textContent = 'Tous les templates';
+        if (pathElement) pathElement.textContent = 'Racine';
+        
+        // Load all templates
+        await this.loadTemplatesForManager();
+    }
+
     /**
      * Export all templates to folder
      */
@@ -1441,6 +2223,49 @@ export class PromptEditorApp extends EventTarget {
         } catch (error) {
             this.logger.error('Error exporting all templates:', error);
             this.showNotification(`Erreur lors de l'export: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * Synchronize templates from filesystem to database
+     */
+    async syncFromFilesystem() {
+        this.logger.debug('Synchronizing from filesystem...');
+        
+        try {
+            // Show loading state
+            const syncBtn = document.getElementById('sync-from-filesystem');
+            if (syncBtn) {
+                syncBtn.disabled = true;
+                syncBtn.innerHTML = '<i class="fas fa-spinner fa-spin mr-2"></i>Synchronisation...';
+            }
+            
+            const response = await fetch('/api/sync/filesystem', {
+                method: 'POST'
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Erreur lors de la synchronisation');
+            }
+            
+            const result = await response.json();
+            this.showNotification(result.message || 'Synchronisation réussie', 'success');
+            
+            // Refresh templates and folders
+            await this.loadTemplatesForManager();
+            await this.loadFoldersForNavigation();
+            
+        } catch (error) {
+            this.logger.error('Error syncing from filesystem:', error);
+            this.showNotification(`Erreur: ${error.message}`, 'error');
+        } finally {
+            // Restore button state
+            const syncBtn = document.getElementById('sync-from-filesystem');
+            if (syncBtn) {
+                syncBtn.disabled = false;
+                syncBtn.innerHTML = '<i class="fas fa-sync mr-2"></i>Sync Filesystem';
+            }
         }
     }
     
