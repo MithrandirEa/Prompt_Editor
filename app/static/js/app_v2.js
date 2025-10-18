@@ -1089,9 +1089,18 @@ export class PromptEditorApp extends EventTarget {
             });
         }
 
-        // Card click (preview/open)
-        card.addEventListener('click', () => {
-            this.previewTemplate(template);
+        // Card click (edit template directly)
+        card.addEventListener('click', async (e) => {
+            // Ignore clicks on buttons
+            if (e.target.classList.contains('star-btn') || 
+                e.target.classList.contains('edit-btn') || 
+                e.target.classList.contains('delete-btn') ||
+                e.target.closest('.star-btn') ||
+                e.target.closest('.edit-btn') ||
+                e.target.closest('.delete-btn')) {
+                return;
+            }
+            await this.editTemplate(template.id);
         });
     }
     
