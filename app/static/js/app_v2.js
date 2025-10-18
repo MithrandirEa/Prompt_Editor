@@ -76,6 +76,7 @@ export class PromptEditorApp extends EventTarget {
         
         // Drag & Drop state
         this.draggedTemplate = null;
+        this.draggedFolder = null;
         
         // Performance tracking
         this.metrics = {
@@ -436,6 +437,35 @@ export class PromptEditorApp extends EventTarget {
                 const searchInput = document.getElementById('global-search');
                 if (searchInput) {
                     this.performFullSearch(searchInput.value);
+                }
+            });
+        }
+        
+        // Logs panel management
+        const logsToggle = document.getElementById('logs-toggle');
+        const logsPanel = document.getElementById('logs-panel');
+        const logsClear = document.getElementById('logs-clear');
+        
+        if (logsToggle && logsPanel) {
+            logsToggle.addEventListener('click', (e) => {
+                e.stopPropagation();
+                logsPanel.classList.toggle('hidden');
+            });
+            
+            // Close logs panel when clicking outside
+            document.addEventListener('click', (e) => {
+                if (!logsToggle.contains(e.target) && !logsPanel.contains(e.target)) {
+                    logsPanel.classList.add('hidden');
+                }
+            });
+        }
+        
+        if (logsClear) {
+            logsClear.addEventListener('click', () => {
+                const logsContent = document.getElementById('logs-content');
+                if (logsContent) {
+                    logsContent.innerHTML = '<div class="text-xs text-gray-500 dark:text-gray-400 italic text-center py-4">Aucun log pour le moment</div>';
+                    this.updateLogsCount();
                 }
             });
         }
@@ -1291,34 +1321,87 @@ export class PromptEditorApp extends EventTarget {
      * Show notification to user
      */
     showNotification(message, type = 'info') {
-        const container = document.getElementById('toast-container');
-        if (!container) return;
+        this.addLogEntry(message, type);
+    }
+
+    addLogEntry(message, type = 'info') {
+        const logsContent = document.getElementById('logs-content');
+        const logsCount = document.getElementById('logs-count');
+        const logsToggle = document.getElementById('logs-toggle');
         
-        const toast = document.createElement('div');
-        const bgColor = type === 'success' ? 'bg-green-600' : type === 'error' ? 'bg-red-600' : 'bg-blue-600';
+        if (!logsContent) return;
         
-        toast.className = `${bgColor} text-white px-4 py-2 rounded-lg shadow-lg transition-all duration-300 transform translate-x-full`;
-        toast.innerHTML = `
-            <div class="flex items-center justify-between">
-                <span>${message}</span>
-                <button onclick="this.parentElement.parentElement.remove()" class="ml-2 text-white opacity-70 hover:opacity-100">
-                    <i class="fas fa-times"></i>
+        // Remove empty message if it exists
+        const emptyMessage = logsContent.querySelector('.italic');
+        if (emptyMessage) {
+            emptyMessage.remove();
+        }
+        
+        // Create log entry
+        const logEntry = document.createElement('div');
+        const timestamp = new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        
+        const typeConfig = {
+            'success': { icon: 'fas fa-check-circle', color: 'text-green-600 dark:text-green-400', bg: 'bg-green-50 dark:bg-green-900/20', border: 'border-l-green-500' },
+            'error': { icon: 'fas fa-exclamation-circle', color: 'text-red-600 dark:text-red-400', bg: 'bg-red-50 dark:bg-red-900/20', border: 'border-l-red-500' },
+            'warning': { icon: 'fas fa-exclamation-triangle', color: 'text-yellow-600 dark:text-yellow-400', bg: 'bg-yellow-50 dark:bg-yellow-900/20', border: 'border-l-yellow-500' },
+            'info': { icon: 'fas fa-info-circle', color: 'text-blue-600 dark:text-blue-400', bg: 'bg-blue-50 dark:bg-blue-900/20', border: 'border-l-blue-500' }
+        };
+        
+        const config = typeConfig[type] || typeConfig['info'];
+        
+        logEntry.className = `${config.bg} border-l-2 ${config.border} p-2 rounded text-xs transition-all duration-300 opacity-0 transform translate-y-2`;
+        logEntry.innerHTML = `
+            <div class="flex items-start space-x-2">
+                <i class="${config.icon} ${config.color} mt-0.5 flex-shrink-0"></i>
+                <div class="flex-1 min-w-0">
+                    <div class="text-gray-900 dark:text-gray-100 break-words">${message}</div>
+                    <div class="text-gray-500 dark:text-gray-400 text-xs mt-1">${timestamp}</div>
+                </div>
+                <button onclick="this.parentElement.parentElement.remove(); app.updateLogsCount();" class="text-gray-400 hover:text-red-500 flex-shrink-0">
+                    <i class="fas fa-times text-xs"></i>
                 </button>
             </div>
         `;
         
-        container.appendChild(toast);
+        // Add to top of logs
+        logsContent.insertBefore(logEntry, logsContent.firstChild);
         
         // Animate in
         setTimeout(() => {
-            toast.classList.remove('translate-x-full');
+            logEntry.classList.remove('opacity-0', 'translate-y-2');
         }, 100);
         
-        // Auto remove after 5 seconds
-        setTimeout(() => {
-            toast.classList.add('translate-x-full');
-            setTimeout(() => toast.remove(), 300);
-        }, 5000);
+        // Update count and show indicator
+        this.updateLogsCount();
+        
+        // Auto-scroll to top
+        logsContent.scrollTop = 0;
+        
+        // Limit to 50 logs maximum
+        const allLogs = logsContent.querySelectorAll('div[class*="border-l-2"]');
+        if (allLogs.length > 50) {
+            allLogs[allLogs.length - 1].remove();
+        }
+    }
+
+    updateLogsCount() {
+        const logsContent = document.getElementById('logs-content');
+        const logsCount = document.getElementById('logs-count');
+        
+        if (!logsContent || !logsCount) return;
+        
+        const logEntries = logsContent.querySelectorAll('div[class*="border-l-2"]');
+        const count = logEntries.length;
+        
+        if (count > 0) {
+            logsCount.textContent = count > 99 ? '99+' : count;
+            logsCount.classList.remove('hidden');
+        } else {
+            logsCount.classList.add('hidden');
+            // Add empty message back
+            logsContent.innerHTML = '<div class="text-xs text-gray-500 dark:text-gray-400 italic text-center py-4">Aucun log pour le moment</div>';
+        }
     }
 
     /**
@@ -2123,14 +2206,67 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
                 return;
             }
             
-            folders.forEach(folder => {
-                const folderElement = this.createFolderElement(folder);
-                folderTree.appendChild(folderElement);
-            });
+            // Build hierarchical structure
+            const folderHierarchy = this.buildFolderHierarchy(folders);
+            
+            // Render folders hierarchically
+            this.renderFolderHierarchy(folderHierarchy, folderTree, 0);
             
         } catch (error) {
             this.logger.error('Error loading folders:', error);
         }
+    }
+    
+    /**
+     * Build hierarchical folder structure from flat array
+     */
+    buildFolderHierarchy(folders) {
+        // Create a map for quick lookup
+        const folderMap = new Map();
+        folders.forEach(folder => {
+            folder.children = [];
+            folderMap.set(folder.id, folder);
+        });
+        
+        // Build hierarchy
+        const rootFolders = [];
+        folders.forEach(folder => {
+            if (folder.parent_id) {
+                const parent = folderMap.get(folder.parent_id);
+                if (parent) {
+                    parent.children.push(folder);
+                } else {
+                    // Parent not found, treat as root
+                    rootFolders.push(folder);
+                }
+            } else {
+                rootFolders.push(folder);
+            }
+        });
+        
+        return rootFolders;
+    }
+    
+    /**
+     * Render folder hierarchy recursively
+     */
+    renderFolderHierarchy(folders, container, level) {
+        folders.forEach(folder => {
+            const folderElement = this.createFolderElement(folder);
+            
+            // Add nesting class for nested folders
+            if (level > 0) {
+                const levelClass = `nested-folder-level-${Math.min(level, 3)}`;
+                folderElement.classList.add('nested-folder', levelClass);
+            }
+            
+            container.appendChild(folderElement);
+            
+            // Render children recursively
+            if (folder.children && folder.children.length > 0) {
+                this.renderFolderHierarchy(folder.children, container, level + 1);
+            }
+        });
     }
 
     /**
@@ -2169,6 +2305,7 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
         const element = document.createElement('div');
         element.className = 'folder-item group';
         element.dataset.folderId = folder.id;
+        element.draggable = true; // Make folders draggable
         
         element.innerHTML = `
             <div class="folder-content flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors">
@@ -2186,8 +2323,11 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
             </div>
         `;
         
-        // Add drag & drop events
+        // Add drag & drop events for receiving templates
         this.attachFolderDragDropEvents(element, folder);
+        
+        // Add drag events for the folder itself
+        this.attachFolderDragEvents(element, folder);
         
         // Add click event for folder selection
         const folderContent = element.querySelector('.folder-content');
@@ -2255,6 +2395,7 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
     handleDragEnd(e) {
         e.target.classList.remove('dragging');
         this.draggedTemplate = null;
+        this.draggedFolder = null;
         
         // Remove drag-over class from all folders
         document.querySelectorAll('.folder-item').forEach(folder => {
@@ -2269,6 +2410,13 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
         element.addEventListener('dragover', (e) => {
             e.preventDefault();
             e.dataTransfer.dropEffect = 'move';
+            
+            // Don't allow dropping a folder into itself
+            if (this.draggedFolder && this.draggedFolder.id === folder.id) {
+                e.dataTransfer.dropEffect = 'none';
+                return;
+            }
+            
             element.classList.add('drag-over');
         });
         
@@ -2285,7 +2433,33 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
             
             if (this.draggedTemplate) {
                 await this.moveTemplateToFolder(this.draggedTemplate.id, folder.id);
+            } else if (this.draggedFolder && this.draggedFolder.id !== folder.id) {
+                await this.moveFolderToFolder(this.draggedFolder.id, folder.id);
             }
+        });
+    }
+    
+    /**
+     * Attach drag events to folder element (for dragging the folder itself)
+     */
+    attachFolderDragEvents(element, folder) {
+        element.addEventListener('dragstart', (e) => {
+            this.draggedFolder = folder;
+            e.dataTransfer.effectAllowed = 'move';
+            element.classList.add('dragging');
+            this.logger.debug('Started dragging folder:', folder.name);
+        });
+        
+        element.addEventListener('dragend', (e) => {
+            element.classList.remove('dragging');
+            this.draggedFolder = null;
+            
+            // Remove drag-over class from all folders
+            document.querySelectorAll('.folder-item').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+            
+            this.logger.debug('Finished dragging folder');
         });
     }
     
@@ -2322,6 +2496,70 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
     }
     
     /**
+     * Move folder to another folder (nesting)
+     */
+    async moveFolderToFolder(folderId, parentFolderId) {
+        try {
+            const response = await fetch(`/api/folders/${folderId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    parent_id: parentFolderId
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Erreur lors du déplacement du dossier');
+            }
+            
+            this.showNotification('Dossier déplacé avec succès', 'success');
+            
+            // Refresh folders and templates
+            await this.loadFoldersForNavigation();
+            await this.loadTemplatesForManager();
+            
+        } catch (error) {
+            this.logger.error('Error moving folder:', error);
+            this.showNotification(`Erreur: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * Move folder to root (remove from parent)
+     */
+    async moveFolderToRoot(folderId) {
+        try {
+            const response = await fetch(`/api/folders/${folderId}`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    parent_id: null
+                })
+            });
+            
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Erreur lors du déplacement du dossier');
+            }
+            
+            this.showNotification('Dossier déplacé vers la racine', 'success');
+            
+            // Refresh folders and templates
+            await this.loadFoldersForNavigation();
+            await this.loadTemplatesForManager();
+            
+        } catch (error) {
+            this.logger.error('Error moving folder to root:', error);
+            this.showNotification(`Erreur: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
      * Attach drag & drop events to root folder element (All templates)
      */
     attachRootFolderDragDropEvents(element) {
@@ -2344,6 +2582,8 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
             
             if (this.draggedTemplate) {
                 await this.moveTemplateToFolder(this.draggedTemplate.id, null);
+            } else if (this.draggedFolder) {
+                await this.moveFolderToRoot(this.draggedFolder.id);
             }
         });
     }

@@ -172,6 +172,75 @@
         .folder-expanded .folder-icon {
             transform: rotate(90deg);
         }
+        
+        /* Logs panel styles */
+        .border-l-green-500 {
+            border-left-color: #10b981;
+        }
+        
+        .border-l-red-500 {
+            border-left-color: #ef4444;
+        }
+        
+        .border-l-yellow-500 {
+            border-left-color: #f59e0b;
+        }
+        
+        .border-l-blue-500 {
+            border-left-color: #3b82f6;
+        }
+        
+        /* Drag & Drop styles for folders */
+        .folder-item.dragging {
+            opacity: 0.5;
+            transform: scale(0.95);
+        }
+        
+        .folder-item.drag-over {
+            background-color: #dbeafe;
+            border-color: #3b82f6;
+            transform: scale(1.02);
+        }
+        
+        .dark .folder-item.drag-over {
+            background-color: #1e3a8a;
+            border-color: #60a5fa;
+        }
+        
+        /* Nested folder styles */
+        .folder-item.nested-folder {
+            position: relative;
+        }
+        
+        .folder-item.nested-folder-level-1 {
+            margin-left: 20px;
+            border-left: 2px solid #e5e7eb;
+            padding-left: 12px;
+        }
+        
+        .folder-item.nested-folder-level-2 {
+            margin-left: 40px;
+            border-left: 2px solid #d1d5db;
+            padding-left: 12px;
+        }
+        
+        .folder-item.nested-folder-level-3 {
+            margin-left: 60px;
+            border-left: 2px solid #c4c4c7;
+            padding-left: 12px;
+        }
+        
+        .dark .folder-item.nested-folder-level-1 {
+            border-left-color: #4b5563;
+        }
+        
+        .dark .folder-item.nested-folder-level-2 {
+            border-left-color: #6b7280;
+        }
+        
+        .dark .folder-item.nested-folder-level-3 {
+            border-left-color: #9ca3af;
+        }
     </style>
 </head>
 <body class="bg-gray-50">
@@ -252,6 +321,31 @@
                                 class="w-64 pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                             >
                             <i class="fas fa-search absolute left-3 top-3 text-gray-400 dark:text-gray-500 cursor-pointer hover:text-gray-600 dark:hover:text-gray-300 transition-colors" title="Cliquez pour rechercher"></i>
+                        </div>
+                        
+                        <!-- Logs Window -->
+                        <div class="relative">
+                            <button 
+                                id="logs-toggle" 
+                                class="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200 relative"
+                                title="Voir les logs"
+                            >
+                                <i class="fas fa-clipboard-list text-sm"></i>
+                                <span id="logs-count" class="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-4 w-4 flex items-center justify-center hidden">0</span>
+                            </button>
+                            
+                            <!-- Logs Dropdown -->
+                            <div id="logs-panel" class="absolute top-full right-0 mt-2 w-64 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-600 rounded-lg shadow-lg z-50 hidden">
+                                <div class="p-3 border-b border-gray-200 dark:border-gray-600 flex items-center justify-between">
+                                    <h3 class="text-sm font-semibold text-gray-900 dark:text-white">Logs</h3>
+                                    <button id="logs-clear" class="text-xs text-gray-500 dark:text-gray-400 hover:text-red-600 dark:hover:text-red-400" title="Effacer les logs">
+                                        <i class="fas fa-trash"></i>
+                                    </button>
+                                </div>
+                                <div id="logs-content" class="max-h-64 overflow-y-auto custom-scrollbar p-2 space-y-1">
+                                    <div class="text-xs text-gray-500 dark:text-gray-400 italic text-center py-4">Aucun log pour le moment</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -531,11 +625,6 @@
                 <!-- Modal content will be populated by JavaScript -->
             </div>
         </div>
-    </div>
-
-    <!-- Toast notifications -->
-    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2">
-        <!-- Toast messages will be added here -->
     </div>
 
     <!-- JavaScript -->
