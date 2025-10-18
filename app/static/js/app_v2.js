@@ -429,10 +429,30 @@ export class PromptEditorApp extends EventTarget {
         // Global search
         const globalSearch = document.getElementById('global-search');
         if (globalSearch) {
+            // Filter sidebar on input
             globalSearch.addEventListener('input', (e) => {
                 this.logger.debug('Search input:', e.target.value);
-                // Basic search functionality
+                // Basic search functionality for sidebar
                 this.performBasicSearch(e.target.value);
+            });
+            
+            // Show search results on Enter
+            globalSearch.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    this.performFullSearch(e.target.value);
+                }
+            });
+        }
+        
+        // Search icon click handler
+        const searchIcon = document.querySelector('i.fa-search');
+        if (searchIcon) {
+            searchIcon.addEventListener('click', () => {
+                const searchInput = document.getElementById('global-search');
+                if (searchInput) {
+                    this.performFullSearch(searchInput.value);
+                }
             });
         }
         
@@ -668,10 +688,17 @@ export class PromptEditorApp extends EventTarget {
     }
     
     /**
-     * Perform basic search functionality
+     * Perform basic search functionality (sidebar filtering only)
      */
     performBasicSearch(query) {
-        if (!query.trim()) return;
+        if (!query.trim()) {
+            // Show all items when query is empty
+            const templateItems = document.querySelectorAll('.template-item');
+            templateItems.forEach(item => {
+                item.style.display = 'block';
+            });
+            return;
+        }
         
         // Simple search in template titles in sidebar
         const templateItems = document.querySelectorAll('.template-item');
@@ -683,6 +710,165 @@ export class PromptEditorApp extends EventTarget {
                 item.style.display = isMatch ? 'block' : 'none';
             }
         });
+    }
+
+    /**
+     * Perform full search and display results in main view
+     */
+    async performFullSearch(query) {
+        if (!query.trim()) {
+            this.showNotification('Veuillez entrer un terme de recherche', 'warning');
+            return;
+        }
+
+        try {
+            this.logger.debug('Performing full search for:', query);
+            
+            // Switch to management tab to show results
+            const managerTab = document.getElementById('management-tab');
+            if (managerTab) {
+                managerTab.click();
+            }
+
+            // Show loading indicator
+            this.showNotification('Recherche en cours...', 'info');
+
+            // Perform search via API
+            const response = await fetch(`/api/templates?search=${encodeURIComponent(query)}`);
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            const searchResults = data.data || [];
+
+            this.logger.debug(`Search completed: ${searchResults.length} results found`);
+
+            // Display search results
+            await this.displaySearchResults(searchResults, query);
+
+            this.showNotification(`${searchResults.length} résultat(s) trouvé(s)`, 'success');
+
+        } catch (error) {
+            this.logger.error('Error performing search:', error);
+            this.showNotification(`Erreur lors de la recherche: ${error.message}`, 'error');
+        }
+    }
+
+    /**
+     * Display search results in the management view
+     */
+    async displaySearchResults(results, query) {
+        const templatesContainer = document.getElementById('templates-container');
+        if (!templatesContainer) return;
+
+        // Clear current content
+        templatesContainer.innerHTML = '';
+
+        if (results.length === 0) {
+            templatesContainer.innerHTML = `
+                <div class="col-span-full text-center py-16">
+                    <div class="text-gray-400 dark:text-gray-500 mb-4">
+                        <i class="fas fa-search text-6xl"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">
+                        Aucun résultat trouvé
+                    </h3>
+                    <p class="text-gray-500 dark:text-gray-400">
+                        Aucun template ne correspond à votre recherche "<strong>${query}</strong>"
+                    </p>
+                    <button 
+                        onclick="app.clearSearch()" 
+                        class="mt-4 bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        Voir tous les templates
+                    </button>
+                </div>
+            `;
+            return;
+        }
+
+        // Add search header
+        const searchHeader = document.createElement('div');
+        searchHeader.className = 'col-span-full mb-6';
+        searchHeader.innerHTML = `
+            <div class="bg-blue-50 dark:bg-blue-900/30 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center space-x-3">
+                        <i class="fas fa-search text-blue-600 dark:text-blue-400"></i>
+                        <div>
+                            <h3 class="text-lg font-medium text-blue-900 dark:text-blue-100">
+                                Résultats de recherche
+                            </h3>
+                            <p class="text-sm text-blue-700 dark:text-blue-300">
+                                ${results.length} résultat(s) pour "<strong>${query}</strong>"
+                            </p>
+                        </div>
+                    </div>
+                    <button 
+                        onclick="app.clearSearch()" 
+                        class="bg-blue-600 text-white px-3 py-1 rounded text-sm hover:bg-blue-700 transition-colors"
+                    >
+                        Effacer
+                    </button>
+                </div>
+            </div>
+        `;
+        templatesContainer.appendChild(searchHeader);
+
+        // Display search results
+        results.forEach(template => {
+            const card = this.createTemplateCard(template);
+            // Highlight search terms in the card
+            this.highlightSearchTerms(card, query);
+            templatesContainer.appendChild(card);
+        });
+    }
+
+    /**
+     * Highlight search terms in a template card
+     */
+    highlightSearchTerms(card, query) {
+        const searchRegex = new RegExp(`(${query})`, 'gi');
+        
+        // Highlight in title
+        const titleElement = card.querySelector('h3');
+        if (titleElement) {
+            titleElement.innerHTML = titleElement.textContent.replace(
+                searchRegex, 
+                '<mark class="bg-yellow-200 dark:bg-yellow-600 px-1 rounded">$1</mark>'
+            );
+        }
+
+        // Highlight in description
+        const descElement = card.querySelector('p');
+        if (descElement) {
+            descElement.innerHTML = descElement.textContent.replace(
+                searchRegex, 
+                '<mark class="bg-yellow-200 dark:bg-yellow-600 px-1 rounded">$1</mark>'
+            );
+        }
+    }
+
+    /**
+     * Clear search and show all templates
+     */
+    async clearSearch() {
+        this.logger.debug('Clearing search results');
+        
+        // Clear search input
+        const searchInput = document.getElementById('global-search');
+        if (searchInput) {
+            searchInput.value = '';
+        }
+
+        // Clear sidebar filter
+        this.performBasicSearch('');
+
+        // Reload all templates in management view
+        await this.loadTemplatesForManager();
+
+        this.showNotification('Recherche effacée', 'success');
     }
 
     /**
@@ -2610,3 +2796,10 @@ document.addEventListener('DOMContentLoaded', async () => {
         document.body.appendChild(errorDiv);
     }
 });
+
+// Expose clearSearch function globally for HTML onclick handlers
+window.clearSearch = () => {
+    if (appInstance) {
+        appInstance.clearSearch();
+    }
+};
