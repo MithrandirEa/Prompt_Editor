@@ -1,0 +1,41 @@
+{
+  "name": "prompt-editor-v2",
+  "version": "2.0.0",
+  "description": "A modern web application for creating, formatting, and managing prompt templates with full Markdown support",
+  "main": "run.py",
+  "scripts": {
+    "test": "jest",
+    "test:watch": "jest --watch",
+    "test:coverage": "jest --coverage",
+    "docs:build": "sphinx-build -b html docs docs/_build",
+    "docs:serve": "python -m http.server 8080 --directory docs/_build",
+    "lint:js": "eslint app/static/js/",
+    "lint:fix": "eslint app/static/js/ --fix"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "@jest/environment-jsdom": "^29.7.0",
+    "eslint": "^8.57.0",
+    "jest-environment-jsdom": "^29.7.0"
+  },
+  "jest": {
+    "testEnvironment": "jsdom",
+    "setupFilesAfterEnv": ["<rootDir>/tests/setup.js"],
+    "testMatch": [
+      "<rootDir>/tests/**/*.test.js",
+      "<rootDir>/tests/**/*.spec.js"
+    ],
+    "collectCoverageFrom": [
+      "app/static/js/**/*.js",
+      "!app/static/js/**/*.min.js"
+    ],
+    "coverageDirectory": "coverage",
+    "coverageReporters": ["html", "text", "lcov"]
+  },
+  "author": "Mithrandir",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Mithrandir/prompt-editor-v2.git"
+  }
+}
