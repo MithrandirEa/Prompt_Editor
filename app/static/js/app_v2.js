@@ -1091,15 +1091,14 @@ export class PromptEditorApp extends EventTarget {
 
         // Card click (edit template directly)
         card.addEventListener('click', async (e) => {
-            // Ignore clicks on buttons
-            if (e.target.classList.contains('star-btn') || 
-                e.target.classList.contains('edit-btn') || 
-                e.target.classList.contains('delete-btn') ||
-                e.target.closest('.star-btn') ||
-                e.target.closest('.edit-btn') ||
-                e.target.closest('.delete-btn')) {
+            // Ignore clicks on buttons and their children
+            if (e.target.matches('.star-btn, .edit-btn, .delete-btn, .fas') || 
+                e.target.closest('.star-btn, .edit-btn, .delete-btn')) {
                 return;
             }
+            
+            e.stopPropagation();
+            e.preventDefault();
             await this.editTemplate(template.id);
         });
     }
@@ -1451,7 +1450,13 @@ export class PromptEditorApp extends EventTarget {
      */
     async deleteTemplate(templateId, templateTitle) {
         try {
-            const confirmed = confirm(`Êtes-vous sûr de vouloir supprimer le template "${templateTitle}" ?\n\nCette action est irréversible.`);
+            // Use a custom confirmation method to avoid conflicts
+            const confirmed = await this.showCustomConfirm(
+                'Confirmer la suppression',
+                `Êtes-vous sûr de vouloir supprimer le template "${templateTitle}" ?\n\nCette action est irréversible.`,
+                'Supprimer',
+                'Annuler'
+            );
             
             if (!confirmed) return;
             
@@ -1784,6 +1789,79 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
         if (modalOverlay) {
             modalOverlay.classList.add('hidden');
         }
+    }
+
+    /**
+     * Show custom confirmation dialog
+     */
+    showCustomConfirm(title, message, confirmText = 'OK', cancelText = 'Annuler') {
+        return new Promise((resolve) => {
+            const modalOverlay = document.getElementById('modal-overlay');
+            const modalContent = document.getElementById('modal-content');
+            
+            if (!modalOverlay || !modalContent) {
+                // Fallback to native confirm
+                resolve(confirm(message));
+                return;
+            }
+
+            modalContent.innerHTML = `
+                <div class="text-center">
+                    <div class="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100 dark:bg-red-900/30 mb-4">
+                        <i class="fas fa-exclamation-triangle text-red-600 dark:text-red-400 text-xl"></i>
+                    </div>
+                    <h3 class="text-lg font-medium text-gray-900 dark:text-white mb-2">${title}</h3>
+                    <p class="text-sm text-gray-500 dark:text-gray-400 mb-6 whitespace-pre-line">${message}</p>
+                    <div class="flex space-x-3 justify-center">
+                        <button 
+                            id="confirm-cancel-btn" 
+                            class="px-4 py-2 bg-gray-300 dark:bg-gray-600 text-gray-700 dark:text-gray-200 rounded-md hover:bg-gray-400 dark:hover:bg-gray-500 transition-colors"
+                        >
+                            ${cancelText}
+                        </button>
+                        <button 
+                            id="confirm-ok-btn" 
+                            class="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 transition-colors"
+                        >
+                            ${confirmText}
+                        </button>
+                    </div>
+                </div>
+            `;
+
+            // Show modal
+            modalOverlay.classList.remove('hidden');
+
+            // Add event listeners
+            const cancelBtn = document.getElementById('confirm-cancel-btn');
+            const okBtn = document.getElementById('confirm-ok-btn');
+
+            const cleanup = () => {
+                modalOverlay.classList.add('hidden');
+                if (cancelBtn) cancelBtn.removeEventListener('click', handleCancel);
+                if (okBtn) okBtn.removeEventListener('click', handleOk);
+            };
+
+            const handleCancel = () => {
+                cleanup();
+                resolve(false);
+            };
+
+            const handleOk = () => {
+                cleanup();
+                resolve(true);
+            };
+
+            if (cancelBtn) cancelBtn.addEventListener('click', handleCancel);
+            if (okBtn) okBtn.addEventListener('click', handleOk);
+
+            // Close on outside click
+            modalOverlay.addEventListener('click', (e) => {
+                if (e.target === modalOverlay) {
+                    handleCancel();
+                }
+            });
+        });
     }
     
     /**
