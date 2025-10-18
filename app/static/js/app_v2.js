@@ -410,22 +410,6 @@ export class PromptEditorApp extends EventTarget {
             });
         }
         
-        // New template button
-        const newTemplateBtn = document.getElementById('new-template-btn');
-        if (newTemplateBtn) {
-            newTemplateBtn.addEventListener('click', () => {
-                this.logger.debug('New template button clicked');
-                // Clear the editor
-                const titleInput = document.getElementById('template-title');
-                const contentArea = document.getElementById('markdown-editor');
-                if (titleInput) titleInput.value = '';
-                if (contentArea) contentArea.value = '';
-                
-                // Switch to editor tab
-                if (editorTab) editorTab.click();
-            });
-        }
-        
         // Global search
         const globalSearch = document.getElementById('global-search');
         if (globalSearch) {
@@ -967,7 +951,7 @@ export class PromptEditorApp extends EventTarget {
                 templatesGrid.innerHTML = `
                     <div class="col-span-full text-center py-8">
                         <p class="text-gray-500 dark:text-gray-400">Aucun template trouvé</p>
-                        <button onclick="document.getElementById('new-template-btn').click()" 
+                        <button onclick="app.createNewTemplate()" 
                                 class="mt-2 text-blue-600 hover:text-blue-800">
                             Créer votre premier template
                         </button>
@@ -2397,7 +2381,7 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
                     <div class="col-span-full text-center py-8">
                         <i class="fas fa-folder-open text-4xl text-gray-300 dark:text-gray-600 mb-4"></i>
                         <p class="text-gray-500 dark:text-gray-400 mb-2">Ce dossier est vide</p>
-                        <button onclick="document.getElementById('new-template-btn').click()" 
+                        <button onclick="app.createNewTemplate()" 
                                 class="text-blue-600 hover:text-blue-800 text-sm">
                             Ajouter un template à ce dossier
                         </button>
@@ -2815,5 +2799,12 @@ document.addEventListener('DOMContentLoaded', async () => {
 window.clearSearch = () => {
     if (appInstance) {
         appInstance.clearSearch();
+    }
+};
+
+// Expose createNewTemplate function globally for HTML onclick handlers
+window.createNewTemplate = () => {
+    if (appInstance) {
+        appInstance.createNewTemplate();
     }
 };
