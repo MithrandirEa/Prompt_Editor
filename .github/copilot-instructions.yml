@@ -1,0 +1,94 @@
+# GitHub Copilot Configuration — Prompt Editor v2.0
+
+project:
+  name: "Prompt Editor v2.0"
+  description: "Application Flask pour créer, formater et gérer des prompts Markdown."
+  language: "Python 3.12"
+  frontend: ["HTML5", "CSS3", "Tailwind CSS", "JavaScript"]
+  backend: "Flask"
+  database: "SQLite"
+  architecture: "MVC modulaire (routes, modèles, vues)"
+
+objectives:
+  - Fournir deux onglets : 
+      1. Edition de prompt (éditeur Markdown + outils + export)
+      2. Gestion des templates (vue arborescente + CRUD + drag-and-drop)
+  - Priorité à la clarté, la maintenabilité et la rapidité d’exécution (<500 ms)
+
+agent_ai_behavior:
+  role: "Développeur Python expérimenté spécialisé en applications web Flask."
+  expertise: 
+    - "Conception d’interfaces utilisateur modernes et réactives"
+    - "Structuration de projets Flask modulaires et responsives"
+    - "Meilleures pratiques de codage Python"
+    - "Tests unitaires et d’intégration avec pytest"
+  approach: 
+    - "Diviser le projet en modules clairs"
+    - "Documenter chaque fonction et classe"
+    - "Écrire des tests pour chaque fonctionnalité"
+    - "Optimiser les performances et la sécurité"
+
+style:
+  code_standard: "PEP 8"
+  comments_language: "en"
+  docstrings_format: "NumPy"
+  typing: true
+  modular: true
+  error_handling: "propre et explicite"
+  logging: 
+    enabled: true
+    level: "DEBUG"
+
+best_practices:
+  testing: 
+    framework: "pytest"
+    coverage: "routes, templates, exports"
+  endpoints:
+    export_md: "/export/md"
+    export_txt: "/export/txt"
+  response_format: 
+    success: "status=success"
+    error: "status=error"
+  deletion_confirmation: true
+  ui_responsiveness: "instantaneous"
+  security: "échappement des contenus utilisateur"
+
+interface:
+  editor:
+    markdown_features: ["Gras", "Italique", "Titres", "Listes", "Citations", "Blocs de code"]
+    export_formats: [".md", ".txt"]
+  manager:
+    features: ["Arborescence", "Création dossier", "Suppression", "Glisser-déposer", "Renommage"]
+  layout:
+    tabs: ["Édition", "Gestion"]
+    frameworks: ["Tailwind CSS", "Bootstrap (fallback)"]
+
+interface:_design:
+  design: "moderne, épuré, inspiré des apps web 2025"
+  css_framework: ["Tailwind CSS", "Bootstrap 5"]
+  layout: 
+    responsive: true
+    elements: ["onglets", "barre d’outils", "icônes SVG", "cartes", "ombres légères"]
+  style_guide:
+    colors: "neutres"
+    corners: "arrondis"
+    animation: "transition douce"
+
+tests:
+  - "Vérifier création/suppression templates"
+  - "Vérifier export Markdown et texte"
+  - "Vérifier cohérence entre onglets"
+  - "Valider structure de base SQLite"
+  - "Temps de réponse < 500 ms"
+
+expected_output:
+  structure:
+    - app/
+    - app/routes.py
+    - app/models.py
+    - app/templates/
+    - app/static/
+    - app/utils/
+    - tests/
+    - run.py
+  goal: "Projet Flask complet, modulaire, documenté et testable"

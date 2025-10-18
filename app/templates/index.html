@@ -1,0 +1,617 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Prompt Editor v2.0</title>
+    
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+        }
+    </script>
+    
+    <!-- Custom CSS -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <style>
+        /* Custom Tailwind configuration */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            transition: background-color 0.3s ease, color 0.3s ease;
+        }
+        
+        /* Dark mode support */
+        .dark body {
+            background-color: #111827;
+            color: #f9fafb;
+        }
+        
+        /* Ensure dark mode cascades properly */
+        .dark {
+            color-scheme: dark;
+        }
+        
+        /* Custom scrollbar */
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+        
+        .dark .custom-scrollbar::-webkit-scrollbar-track {
+            background: #374151;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+        
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #6b7280;
+        }
+        
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+        
+        .dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #9ca3af;
+        }
+        
+        /* Animation classes */
+        .fade-in {
+            animation: fadeIn 0.3s ease-in-out;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        /* Tab active state */
+        .tab-active {
+            background-color: #3b82f6;
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* Editor styles */
+        .editor-container {
+            min-height: 500px;
+        }
+        
+        .markdown-toolbar button:hover {
+            background-color: #f1f5f9;
+            transform: translateY(-1px);
+        }
+        
+        .dark .markdown-toolbar button:hover {
+            background-color: #374151;
+        }
+        
+        /* Template card hover effects */
+        .template-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.1);
+        }
+        
+        .dark .template-card:hover {
+            box-shadow: 0 10px 25px -3px rgba(0, 0, 0, 0.3);
+        }
+        
+        /* Favorite checkbox styling */
+        .favorite-checkbox {
+            appearance: none;
+            width: 18px;
+            height: 18px;
+            border: 2px solid #fbbf24;
+            border-radius: 3px;
+            background-color: white;
+            cursor: pointer;
+            position: relative;
+            transition: all 0.2s ease;
+        }
+        
+        .favorite-checkbox:checked {
+            background-color: #fbbf24;
+            border-color: #f59e0b;
+        }
+        
+        .favorite-checkbox:checked::after {
+            content: '\2605';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 12px;
+            line-height: 1;
+        }
+        
+        .favorite-checkbox:hover {
+            border-color: #f59e0b;
+            box-shadow: 0 0 0 2px rgba(251, 191, 36, 0.2);
+        }
+        
+        /* Folder tree styling */
+        .folder-item {
+            cursor: pointer;
+            padding: 8px 12px;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+            border: 1px solid transparent;
+        }
+        
+        .folder-item:hover {
+            background-color: #eff6ff;
+            border-color: #bfdbfe;
+        }
+        
+        .folder-item.active {
+            background-color: #dbeafe;
+            border-color: #3b82f6;
+            font-weight: 600;
+        }
+        
+        .folder-icon {
+            transition: transform 0.2s ease;
+        }
+        
+        .folder-expanded .folder-icon {
+            transform: rotate(90deg);
+        }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <!-- Main Container -->
+    <div class="min-h-screen flex flex-col">
+        
+        <!-- Header -->
+        <header class="bg-white dark:bg-gray-800 shadow-sm border-b border-gray-200 dark:border-gray-700">
+            <div class="flex justify-between items-center h-16 px-2">
+                <div class="flex items-center space-x-2">
+                    <!-- Navigation Actions -->
+                    <div class="flex items-center">
+                        <button 
+                            id="nav-back-btn" 
+                            class="p-1.5 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                            title="Page précédente"
+                            disabled
+                        >
+                            <i class="fas fa-arrow-left text-sm"></i>
+                        </button>
+                            
+                            <button 
+                                id="nav-forward-btn" 
+                                class="p-1.5 ml-1 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                                title="Page suivante"
+                                disabled
+                            >
+                                <i class="fas fa-arrow-right text-sm"></i>
+                            </button>
+                        </div>
+                        
+                        <!-- Separator -->
+                        <div class="h-6 w-px bg-gray-300 dark:bg-gray-600"></div>
+                        
+                        <!-- Theme Toggle -->
+                        <button 
+                            id="theme-toggle" 
+                            class="p-2 text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors duration-200"
+                            title="Basculer le thème"
+                        >
+                            <i id="theme-icon" class="fas fa-moon"></i>
+                        </button>
+                        
+                        <div class="flex items-center space-x-2">
+                            <i class="fas fa-edit text-blue-600 text-xl"></i>
+                            <h1 class="text-xl font-bold text-gray-900 dark:text-white">Prompt Editor v2.0</h1>
+                        </div>
+                        
+                        <!-- Tab Navigation Icons -->
+                        <div class="flex items-center space-x-1 ml-8">
+                            <button 
+                                id="editor-tab" 
+                                class="p-3 rounded-lg transition-all duration-200 tab-active flex items-center space-x-2"
+                                title="Édition des templates"
+                            >
+                                <i class="fas fa-edit text-lg"></i>
+                                <span class="text-sm font-medium">Édition</span>
+                            </button>
+                            
+                            <button 
+                                id="manager-tab" 
+                                class="p-3 rounded-lg transition-all duration-200 text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center space-x-2"
+                                title="Gestion des templates"
+                            >
+                                <i class="fas fa-folder-tree text-lg"></i>
+                                <span class="text-sm font-medium">Gestion</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center space-x-4">
+                        <!-- Search -->
+                        <div class="relative">
+                            <input 
+                                type="text" 
+                                id="global-search" 
+                                placeholder="Rechercher..." 
+                                class="w-64 pl-10 pr-4 py-2 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                            >
+                            <i class="fas fa-search absolute left-3 top-3 text-gray-400 dark:text-gray-500"></i>
+                        </div>
+                        
+                        <!-- Quick Actions -->
+                        <button 
+                            id="new-template-btn" 
+                            class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200 flex items-center space-x-2"
+                        >
+                            <i class="fas fa-plus"></i>
+                            <span>Nouveau</span>
+                        </button>
+                    </div>
+                </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="flex-1 flex">
+            <!-- Templates Sidebar -->
+            <div id="templates-sidebar" class="w-64 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 transition-all duration-300">
+                <!-- Sidebar Header -->
+                <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                    <div class="flex items-center justify-between">
+                        <h3 class="text-sm font-semibold text-gray-900 dark:text-gray-100 uppercase tracking-wide flex items-center">
+                            <i class="fas fa-file-alt mr-2 text-blue-600 dark:text-blue-400"></i>
+                            Templates
+                        </h3>
+                        <button 
+                            id="toggle-sidebar" 
+                            class="p-1.5 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                            title="Réduire le panneau"
+                        >
+                            <i class="fas fa-chevron-left"></i>
+                        </button>
+                    </div>
+                </div>
+                
+                <!-- Sidebar Content -->
+                <div class="flex-1 overflow-y-auto">
+                    <!-- Filter Tabs -->
+                    <div class="p-4 border-b border-gray-200 dark:border-gray-700">
+                        <div class="flex space-x-1">
+                            <button 
+                                id="show-recent" 
+                                class="flex-1 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors sidebar-tab-active"
+                            >
+                                <i class="fas fa-clock mr-1"></i> Récents
+                            </button>
+                            <button 
+                                id="show-favorites" 
+                                class="flex-1 px-3 py-2 text-xs font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
+                            >
+                                <i class="fas fa-star mr-1"></i> Favoris
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Templates List -->
+                    <div class="p-4">
+                        <!-- Recent Templates -->
+                        <div id="recent-templates-list" class="space-y-2">
+                            {% for template in recent_templates %}
+                            <div 
+                                class="template-item p-3 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-300 dark:hover:border-blue-500 cursor-pointer transition-colors duration-200 bg-white dark:bg-gray-700"
+                                data-template-id="{{ template.id }}"
+                            >
+                                <div class="flex items-center justify-between">
+                                    <h4 class="text-sm font-medium text-gray-900 dark:text-white truncate">{{ template.title }}</h4>
+                                    {% if template.is_favorite %}
+                                    <i class="fas fa-star text-yellow-400 text-xs"></i>
+                                    {% endif %}
+                                </div>
+                                <p class="text-xs text-gray-500 dark:text-gray-400 mt-1">{{ template.updated_at.strftime('%d/%m/%Y') }}</p>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        
+                        <!-- Favorite Templates (initially hidden) -->
+                        <div id="favorite-templates-list" class="space-y-2 hidden">
+                            <!-- Will be populated by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Collapsed Sidebar -->
+            <div id="collapsed-sidebar" class="w-12 bg-white dark:bg-gray-800 shadow-sm border-r border-gray-200 dark:border-gray-700 hidden">
+                <div class="p-3">
+                    <button 
+                        id="expand-sidebar" 
+                        class="w-full p-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded transition-colors"
+                        title="Développer le panneau"
+                    >
+                        <i class="fas fa-chevron-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Content Area -->
+            <div class="flex-1 flex flex-col">
+                
+                <!-- Editor Tab Content -->
+                <div id="editor-content" class="flex-1 flex">
+                    
+                    <!-- Editor Panel -->
+                    <div class="flex-1 flex flex-col bg-white dark:bg-gray-800">
+                        
+                        <!-- Editor Toolbar -->
+                        <div class="border-b border-gray-200 dark:border-gray-700 p-4">
+                            <div class="flex items-center justify-between">
+                                <div class="flex items-center space-x-4">
+                                    <input 
+                                        type="text" 
+                                        id="template-title" 
+                                        placeholder="Titre du template..." 
+                                        class="text-xl font-semibold bg-transparent border-none focus:outline-none focus:ring-2 focus:ring-blue-500 rounded px-2 py-1 text-gray-900 dark:text-white"
+                                        value=""
+                                    >
+                                </div>
+                                
+                                <div class="flex items-center space-x-2">
+                                    <button id="save-template" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200">
+                                        <i class="fas fa-save mr-2"></i>Sauvegarder
+                                    </button>
+                                    
+                                    <div class="flex items-center space-x-1 border-l border-gray-200 dark:border-gray-600 pl-2">
+                                        <button id="save-to-folder" class="text-gray-600 dark:text-gray-300 hover:text-green-600 dark:hover:text-green-400 px-2 py-1 rounded transition-colors duration-200" title="Télécharger comme fichier .md">
+                                            <i class="fas fa-download"></i>
+                                        </button>
+                                        <button id="export-md" class="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-2 py-1 rounded transition-colors duration-200" title="Exporter en Markdown">
+                                            <i class="fab fa-markdown"></i>
+                                        </button>
+                                        <button id="export-txt" class="text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400 px-2 py-1 rounded transition-colors duration-200" title="Exporter en texte">
+                                            <i class="fas fa-file-alt"></i>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Markdown Toolbar -->
+                        <div class="border-b border-gray-200 dark:border-gray-700 p-3 bg-gray-50 dark:bg-gray-900">
+                            <div class="markdown-toolbar flex items-center space-x-2">
+                                <button data-action="bold" class="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 text-gray-700 dark:text-gray-300" title="Gras">
+                                    <i class="fas fa-bold"></i>
+                                </button>
+                                <button data-action="italic" class="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 text-gray-700 dark:text-gray-300" title="Italique">
+                                    <i class="fas fa-italic"></i>
+                                </button>
+                                <button data-action="heading" class="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 text-gray-700 dark:text-gray-300" title="Titre">
+                                    <i class="fas fa-heading"></i>
+                                </button>
+                                <div class="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
+                                <button data-action="list" class="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 text-gray-700 dark:text-gray-300" title="Liste">
+                                    <i class="fas fa-list-ul"></i>
+                                </button>
+                                <button data-action="quote" class="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 text-gray-700 dark:text-gray-300" title="Citation">
+                                    <i class="fas fa-quote-left"></i>
+                                </button>
+                                <button data-action="code" class="p-2 rounded hover:bg-gray-200 dark:hover:bg-gray-700 transition-all duration-200 text-gray-700 dark:text-gray-300" title="Code">
+                                    <i class="fas fa-code"></i>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <!-- Editor Area -->
+                        <div class="flex-1 flex">
+                            <div class="flex-1 p-4">
+                                <textarea 
+                                    id="markdown-editor" 
+                                    class="w-full h-full resize-none border-none focus:outline-none text-sm font-mono leading-relaxed custom-scrollbar bg-transparent text-gray-900 dark:text-white"
+                                    placeholder="Commencez à taper votre prompt en Markdown..."
+                                ></textarea>
+                            </div>
+                            
+                            <!-- Live Preview -->
+                            <div class="flex-1 border-l border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900">
+                                <div class="h-full">
+                                    <h4 class="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">Aperçu</h4>
+                                    <div id="markdown-preview" class="markdown-preview custom-scrollbar overflow-y-auto h-full bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white">
+                                        <p class="text-gray-500 dark:text-gray-400 italic">L'aperçu apparaîtra ici...</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Manager Tab Content -->
+                <div id="manager-content" class="flex-1 hidden flex flex-col h-full">
+                    
+                    <!-- Manager Toolbar -->
+                    <div class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700 p-4">
+                        <div class="flex items-center justify-between">
+                            <h2 class="text-lg font-semibold text-gray-900 dark:text-white">Gestion des Templates</h2>
+                            
+                            <div class="flex items-center space-x-2">
+                                <button id="export-all-to-folder" class="bg-green-600 text-white px-4 py-2 rounded-lg hover:bg-green-700 transition-colors duration-200">
+                                    <i class="fas fa-download mr-2"></i>Télécharger tous
+                                </button>
+                                <button id="new-folder-btn" class="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition-colors duration-200">
+                                    <i class="fas fa-folder-plus mr-2"></i>Nouveau dossier
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Manager Content -->
+                    <div class="flex-1 flex h-full">
+                        
+                        <!-- Folder Navigation Panel -->
+                        <div id="navigation-panel" class="folder-space navigation-panel bg-white dark:bg-gray-800 border-r border-gray-200 dark:border-gray-600 flex flex-col h-full" style="width: 320px; min-width: 200px; max-width: 600px;">
+                            <!-- Navigation Header - Similar to Templates Header -->
+                            <div class="bg-white dark:bg-gray-800 border-b-2 border-gray-200 dark:border-gray-600 p-4 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center space-x-3">
+                                        <i class="fas fa-folder-tree text-blue-600 dark:text-blue-400 text-lg"></i>
+                                        <div>
+                                            <h3 class="text-lg font-bold text-gray-900 dark:text-gray-100">Navigation</h3>
+                                            <p class="text-xs text-gray-500 dark:text-gray-400">Arborescence des dossiers</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-3">
+                                        <button 
+                                            onclick="showNewFolderModal()" 
+                                            class="px-3 py-1.5 text-sm bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300 hover:bg-blue-200 dark:hover:bg-blue-800 rounded-lg transition-colors duration-200 flex items-center space-x-1" 
+                                            title="Nouveau dossier">
+                                            <i class="fas fa-plus"></i>
+                                            <span>Nouveau</span>
+                                        </button>
+                                        <button id="expand-all-folders" class="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200 flex items-center space-x-1" title="Tout développer">
+                                            <i class="fas fa-expand-arrows-alt"></i>
+                                            <span>Développer</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Folder Tree - Full height -->
+                            <div class="flex-1 p-6 overflow-y-auto">
+                                <div id="folder-tree" class="space-y-1">
+                                    <!-- Folder tree will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Resize Handle -->
+                        <div id="resize-handle" class="w-1 bg-gray-300 dark:bg-gray-600 hover:bg-blue-500 dark:hover:bg-blue-400 cursor-col-resize transition-colors duration-200 flex-shrink-0 relative group">
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <div class="w-0.5 h-8 bg-gray-400 dark:bg-gray-500 group-hover:bg-blue-600 dark:group-hover:bg-blue-300 transition-colors duration-200"></div>
+                            </div>
+                        </div>
+                        
+                        <!-- Templates Display Panel -->
+                        <div class="templates-space flex-1 bg-white dark:bg-gray-800 custom-scrollbar overflow-y-auto">
+                            <!-- Templates Panel Header -->
+                            <div class="bg-white dark:bg-gray-800 border-b-2 border-gray-200 dark:border-gray-600 p-4 sticky top-0 z-10 shadow-sm">
+                                <div class="flex items-center justify-between">
+                                    <div class="flex items-center space-x-3">
+                                        <i class="fas fa-folder-open text-blue-600 dark:text-blue-400 text-lg"></i>
+                                        <div>
+                                            <h3 id="current-folder-title" class="text-lg font-bold text-gray-900 dark:text-gray-100">Tous les templates</h3>
+                                            <p id="current-folder-path" class="text-xs text-gray-500 dark:text-gray-400">Racine</p>
+                                        </div>
+                                    </div>
+                                    <div class="flex items-center space-x-3">
+                                        <div class="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                                            <span id="templates-count">0 template(s)</span>
+                                        </div>
+                                        <div class="w-px h-6 bg-gray-300 dark:bg-gray-600"></div>
+                                        <button id="view-favorites" class="px-3 py-1.5 text-sm bg-yellow-100 dark:bg-yellow-900 text-yellow-700 dark:text-yellow-300 hover:bg-yellow-200 dark:hover:bg-yellow-800 rounded-lg transition-colors duration-200 flex items-center space-x-1">
+                                            <i class="fas fa-star"></i>
+                                            <span>Voir favoris</span>
+                                        </button>
+                                        <button id="view-all" class="px-3 py-1.5 text-sm bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 rounded-lg transition-colors duration-200 flex items-center space-x-1">
+                                            <i class="fas fa-th-large"></i>
+                                            <span>Voir tout</span>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Templates Grid -->
+                            <div class="p-6">
+                                <div id="templates-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                                    <!-- Template cards will be populated by JavaScript -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modal for new template/folder -->
+    <div id="modal-overlay" class="fixed inset-0 bg-black bg-opacity-50 hidden z-50">
+        <div class="flex items-center justify-center min-h-screen p-4">
+            <div id="modal-content" class="bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full p-6">
+                <!-- Modal content will be populated by JavaScript -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast notifications -->
+    <div id="toast-container" class="fixed top-4 right-4 z-50 space-y-2">
+        <!-- Toast messages will be added here -->
+    </div>
+
+    <!-- JavaScript -->
+    <!-- Markdown parser -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.2/marked.min.js"></script>
+    
+    <!-- JSZip for creating ZIP archives -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    
+    <script>
+        // Initialize the app when DOM is loaded and marked is available
+        document.addEventListener('DOMContentLoaded', function() {
+            // Wait for marked.js to be available
+            function initializeApp() {
+                if (typeof marked !== 'undefined' && typeof App !== 'undefined') {
+                    console.log('Marked.js loaded, initializing app...');
+                    App.init();
+                    
+                    // Force search functionality binding after app init
+                    setTimeout(() => {
+                        console.log('🔧 Force binding search functionality...');
+                        const searchInput = document.getElementById('global-search');
+                        console.log('🔧 Search input found:', searchInput);
+                        
+                        if (searchInput) {
+                            // Remove any existing listeners and add new one
+                            const newInput = searchInput.cloneNode(true);
+                            searchInput.parentNode.replaceChild(newInput, searchInput);
+                            
+                            newInput.addEventListener('input', function(e) {
+                                console.log('🎯 FORCE SEARCH EVENT:', e.target.value);
+                                if (typeof App !== 'undefined' && App.searchTemplates) {
+                                    App.searchTemplates(e.target.value);
+                                }
+                            });
+                            
+                            newInput.addEventListener('keydown', function(e) {
+                                console.log('🎯 FORCE KEYDOWN EVENT:', e.key, e.target.value);
+                            });
+                            
+                            console.log('✅ Force binding complete');
+                        } else {
+                            console.error('❌ Search input not found for force binding');
+                        }
+                    }, 1000);
+                    
+                } else {
+                    console.log('Waiting for marked.js to load...');
+                    setTimeout(initializeApp, 100);
+                }
+            }
+            initializeApp();
+        });
+    </script>
+</body>
+</html>
