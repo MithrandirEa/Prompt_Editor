@@ -566,52 +566,7 @@
     <!-- JSZip for creating ZIP archives -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     
+    <!-- Application JavaScript Module -->
     <script type="module" src="{{ url_for('static', filename='js/app_v2.js') }}"></script>
-    
-    <script>
-        // Initialize the app when DOM is loaded and marked is available
-        document.addEventListener('DOMContentLoaded', function() {
-            // Wait for marked.js to be available
-            function initializeApp() {
-                if (typeof marked !== 'undefined' && typeof App !== 'undefined') {
-                    console.log('Marked.js loaded, initializing app...');
-                    App.init();
-                    
-                    // Force search functionality binding after app init
-                    setTimeout(() => {
-                        console.log('🔧 Force binding search functionality...');
-                        const searchInput = document.getElementById('global-search');
-                        console.log('🔧 Search input found:', searchInput);
-                        
-                        if (searchInput) {
-                            // Remove any existing listeners and add new one
-                            const newInput = searchInput.cloneNode(true);
-                            searchInput.parentNode.replaceChild(newInput, searchInput);
-                            
-                            newInput.addEventListener('input', function(e) {
-                                console.log('🎯 FORCE SEARCH EVENT:', e.target.value);
-                                if (typeof App !== 'undefined' && App.searchTemplates) {
-                                    App.searchTemplates(e.target.value);
-                                }
-                            });
-                            
-                            newInput.addEventListener('keydown', function(e) {
-                                console.log('🎯 FORCE KEYDOWN EVENT:', e.key, e.target.value);
-                            });
-                            
-                            console.log('✅ Force binding complete');
-                        } else {
-                            console.error('❌ Search input not found for force binding');
-                        }
-                    }, 1000);
-                    
-                } else {
-                    console.log('Waiting for marked.js to load...');
-                    setTimeout(initializeApp, 100);
-                }
-            }
-            initializeApp();
-        });
-    </script>
 </body>
 </html>
