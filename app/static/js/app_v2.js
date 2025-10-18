@@ -410,6 +410,10 @@ export class PromptEditorApp extends EventTarget {
                 managerContent.classList.remove('hidden');
                 editorContent.classList.add('hidden');
                 
+                // Clean up and reinitialize event handlers
+                this.cleanupNavigationHandlers();
+                this.setupTemplateItemsHandlers();
+                
                 // Load templates for manager view and folders for navigation
                 await this.loadTemplatesForManager();
                 await this.loadFoldersForNavigation();
@@ -715,22 +719,89 @@ export class PromptEditorApp extends EventTarget {
     }
     
     /**
+     * Clean up navigation panel event handlers
+     */
+    cleanupNavigationHandlers() {
+        const navigationPanel = document.getElementById('navigation-panel');
+        if (navigationPanel && this.navigationClickHandler) {
+            navigationPanel.removeEventListener('click', this.navigationClickHandler);
+            this.navigationClickHandler = null;
+            this.logger.debug('Navigation panel handlers cleaned up');
+        }
+    }
+
+    /**
      * Setup template items click handlers
      */
     setupTemplateItemsHandlers() {
+        // Clean up any existing handlers first
+        this.cleanupNavigationHandlers();
+        
         // Use event delegation since template items may be added dynamically
-        document.addEventListener('click', async (e) => {
+        // Delegate to navigation panel specifically to avoid conflicts
+        const navigationPanel = document.getElementById('navigation-panel');
+        if (!navigationPanel) {
+            this.logger.warn('Navigation panel not found for event delegation');
+            return;
+        }
+        
+        // Store the handler for cleanup
+        this.navigationClickHandler = async (e) => {
+            // Handle template item clicks
             const templateItem = e.target.closest('.template-item');
             if (templateItem) {
+                e.stopPropagation();
                 const templateId = templateItem.dataset.templateId;
                 if (templateId) {
                     this.logger.debug(`Template item clicked: ${templateId}`);
                     await this.loadTemplateInEditor(templateId);
                 }
+                return;
             }
-        });
+            
+            // Handle any folder clicks (including "All templates")
+            const folderContent = e.target.closest('.folder-content');
+            if (folderContent && !e.target.closest('.delete-folder-btn')) {
+                e.stopPropagation();
+                const folderElement = folderContent.closest('.folder-item');
+                if (folderElement) {
+                    const folderId = folderElement.dataset.folderId;
+                    const folderName = folderElement.dataset.folderName;
+                    if (folderId && folderName) {
+                        // Spécial handling for "All templates"
+                        if (folderId === 'all') {
+                            this.logger.debug('All templates clicked');
+                            this.loadTemplatesForManager(); // Refresh all templates
+                        } else {
+                            this.logger.debug(`Folder clicked: ${folderName} (${folderId})`);
+                            this.selectFolder(folderId, folderName);
+                        }
+                    }
+                }
+                return;
+            }
+            
+            // Handle folder delete clicks
+            const deleteBtn = e.target.closest('.delete-folder-btn');
+            if (deleteBtn) {
+                e.stopPropagation();
+                const folderElement = deleteBtn.closest('.folder-item');
+                if (folderElement) {
+                    const folderId = folderElement.dataset.folderId;
+                    const folderName = folderElement.dataset.folderName;
+                    if (folderId && folderName) {
+                        this.logger.debug(`Folder delete clicked: ${folderName} (${folderId})`);
+                        await this.deleteFolder(folderId, folderName);
+                    }
+                }
+                return;
+            }
+        };
         
-        this.logger.debug('Template items handlers configured');
+        // Attach the handler
+        navigationPanel.addEventListener('click', this.navigationClickHandler);
+        
+        this.logger.debug('Template items handlers configured with proper delegation');
     }
     
     /**
@@ -2373,6 +2444,7 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
         const element = document.createElement('div');
         element.className = 'folder-item group all-templates-item mb-2';
         element.dataset.folderId = 'all';
+        element.dataset.folderName = 'Tous les templates';
         
         element.innerHTML = `
             <div class="folder-content flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 transition-colors">
@@ -2402,6 +2474,7 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
         const element = document.createElement('div');
         element.className = 'folder-item group';
         element.dataset.folderId = folder.id;
+        element.dataset.folderName = folder.name;
         element.draggable = true; // Make folders draggable
         
         element.innerHTML = `
@@ -2426,24 +2499,9 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
         // Add drag events for the folder itself
         this.attachFolderDragEvents(element, folder);
         
-        // Add click event for folder selection
-        const folderContent = element.querySelector('.folder-content');
-        folderContent.addEventListener('click', (e) => {
-            // Don't trigger if clicking on delete button
-            if (!e.target.closest('.delete-folder-btn')) {
-                this.selectFolder(folder.id, folder.name);
-            }
-        });
-        
-        // Add delete event
-        const deleteBtn = element.querySelector('.delete-folder-btn');
-        if (deleteBtn) {
-            deleteBtn.addEventListener('click', async (e) => {
-                e.stopPropagation();
-                await this.deleteFolder(folder.id, folder.name);
-            });
-        }
-        
+        // Note: Click events are handled through event delegation in setupTemplateItemsHandlers
+        // This avoids duplicate event handlers and ensures proper functioning across tab switches
+
         return element;
     }
     
@@ -3141,6 +3199,9 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
     cleanup() {
         try {
             this.logger.info('🧹 Cleaning up application resources...');
+            
+            // Clean up navigation handlers
+            this.cleanupNavigationHandlers();
             
             // Cleanup modules
             for (const [name, module] of this.modules) {
