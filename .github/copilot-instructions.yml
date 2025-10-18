@@ -1,13 +1,19 @@
 # GitHub Copilot Configuration — Prompt Editor v2.0
 
+# 🚨 IMPORTANT: ALWAYS CHECK THESE FILES FIRST BEFORE ANY TROUBLESHOOTING:
+# 1. DIAGNOSTIC_CHECKLIST.md - Primary diagnostic reference and step-by-step troubleshooting
+# 2. CORRECTION_SUMMARY.md - Summary of all fixes and current functionality status
+# 3. PROJECT_SUMMARY.md - Overall architecture and project goals
+# 4. ARCHITECTURE_ANALYSIS.md - Technical implementation details
+
 project:
   name: "Prompt Editor v2.0"
   description: "Application Flask pour créer, formater et gérer des prompts Markdown."
   language: "Python 3.12"
-  frontend: ["HTML5", "CSS3", "Tailwind CSS", "JavaScript"]
+  frontend: ["HTML5", "CSS3", "Tailwind CSS", "JavaScript ES6 Modules"]
   backend: "Flask"
   database: "SQLite"
-  architecture: "MVC modulaire (routes, modèles, vues)"
+  architecture: "MVC modulaire + Architecture JavaScript modulaire"
 
 objectives:
   - Fournir deux onglets : 
@@ -16,12 +22,26 @@ objectives:
   - Priorité à la clarté, la maintenabilité et la rapidité d’exécution (<500 ms)
 
 agent_ai_behavior:
-  role: "Développeur Python expérimenté spécialisé en applications web Flask."
+  role: "Développeur Python/JavaScript expérimenté spécialisé en applications web Flask."
+  
+  # 🔧 WORKFLOW OBLIGATOIRE:
+  # AVANT TOUTE INTERVENTION, consulter dans l'ordre :
+  # 1. DIAGNOSTIC_CHECKLIST.md - Plan d'action étape par étape
+  # 2. Vérifier les logs serveur et console navigateur
+  # 3. Suivre le plan de diagnostic du checklist
+  
   expertise: 
-    - "Conception d’interfaces utilisateur modernes et réactives"
+    - "Architecture JavaScript modulaire ES6"
+    - "Conception d'interfaces utilisateur modernes et réactives"
     - "Structuration de projets Flask modulaires et responsives"
-    - "Meilleures pratiques de codage Python"
-    - "Tests unitaires et d’intégration avec pytest"
+    - "Debugging applications web full-stack"
+    - "Tests unitaires et d'intégration avec pytest et Jest"
+  
+  critical_files:
+    main_app: "app/static/js/app_v2.js"  # Orchestrateur principal (1170 lignes)
+    modules: "app/static/js/{core,managers,ui,utils,config}/"
+    template: "app/templates/index.html"  # Template principal (572 lignes)
+    diagnostic: "DIAGNOSTIC_CHECKLIST.md"  # Guide de diagnostic complet
   approach: 
     - "Diviser le projet en modules clairs"
     - "Documenter chaque fonction et classe"
@@ -75,11 +95,30 @@ interface:_design:
     animation: "transition douce"
 
 tests:
-  - "Vérifier création/suppression templates"
-  - "Vérifier export Markdown et texte"
-  - "Vérifier cohérence entre onglets"
-  - "Valider structure de base SQLite"
-  - "Temps de réponse < 500 ms"
+  frameworks: ["pytest", "Jest"]
+  coverage:
+    - "Frontend integration tests (frontend_integration.test.js)"
+    - "Core module tests (modules.test.js)" 
+    - "End-to-end workflows (e2e.test.js)"
+    - "Vérifier création/suppression templates"
+    - "Vérifier export Markdown et texte"
+    - "Vérifier cohérence entre onglets"
+    - "Valider structure de base SQLite"
+    - "Temps de réponse < 500 ms"
+
+# 🚨 DEBUGGING PROTOCOL:
+debug_workflow:
+  step1: "Consulter DIAGNOSTIC_CHECKLIST.md"
+  step2: "Vérifier console navigateur (F12) pour erreurs JS"
+  step3: "Vérifier logs serveur Flask"
+  step4: "Tester fonctionnalités selon checklist"
+  step5: "Exécuter tests: npm test"
+
+common_issues:
+  js_conflicts: "S'assurer que seul app_v2.js est chargé"
+  event_handlers: "Vérifier setupCriticalDOMEvents() dans app_v2.js"
+  api_issues: "Vérifier que Flask répond aux endpoints /api/"
+  module_loading: "Vérifier imports ES6 et compatibilité navigateur"
 
 expected_output:
   structure:
