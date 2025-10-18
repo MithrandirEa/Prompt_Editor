@@ -389,6 +389,11 @@ export class PromptEditorApp extends EventTarget {
                 // Show editor content, hide manager content
                 editorContent.classList.remove('hidden');
                 managerContent.classList.add('hidden');
+                
+                // Refresh preview when switching to editor tab
+                setTimeout(() => {
+                    this.updateMarkdownPreview();
+                }, 100);
             });
             
             managerTab.addEventListener('click', async () => {
@@ -559,10 +564,31 @@ export class PromptEditorApp extends EventTarget {
         // Markdown editor for live preview
         const markdownEditor = document.getElementById('markdown-editor');
         if (markdownEditor) {
-            markdownEditor.addEventListener('input', () => {
+            // Multiple events for comprehensive auto-refresh
+            const updatePreview = () => {
                 this.updateMarkdownPreview();
+            };
+            
+            // Real-time updates
+            markdownEditor.addEventListener('input', updatePreview);
+            markdownEditor.addEventListener('keyup', updatePreview);
+            markdownEditor.addEventListener('paste', () => {
+                // Slight delay for paste content to be processed
+                setTimeout(updatePreview, 50);
             });
+            
+            // Focus/blur events
+            markdownEditor.addEventListener('focus', updatePreview);
+            markdownEditor.addEventListener('blur', updatePreview);
+            
+            // Content change detection
+            markdownEditor.addEventListener('change', updatePreview);
+            
+            this.logger.debug('Auto-refresh preview events configured');
         }
+
+        // Preview toggle functionality
+        this.setupPreviewToggle();
 
         // Sidebar tab buttons (Recent/Favorites)
         this.setupSidebarTabs();
@@ -616,6 +642,76 @@ export class PromptEditorApp extends EventTarget {
         }
         
         this.logger.debug('Sidebar tabs configured');
+    }
+    
+    /**
+     * Setup preview toggle functionality
+     */
+    setupPreviewToggle() {
+        const togglePreviewBtn = document.getElementById('toggle-preview');
+        const expandPreviewBtn = document.getElementById('expand-preview');
+        const previewPanel = document.getElementById('preview-panel');
+        const previewToggleCollapsed = document.getElementById('preview-toggle-collapsed');
+        const previewToggleIcon = document.getElementById('preview-toggle-icon');
+        
+        if (!togglePreviewBtn || !expandPreviewBtn || !previewPanel || !previewToggleCollapsed || !previewToggleIcon) {
+            this.logger.warn('Preview toggle elements not found');
+            return;
+        }
+        
+        let isPreviewCollapsed = false;
+        
+        // Toggle preview panel
+        const togglePreview = () => {
+            isPreviewCollapsed = !isPreviewCollapsed;
+            
+            if (isPreviewCollapsed) {
+                // Collapse preview
+                previewPanel.classList.add('preview-collapsed');
+                previewPanel.classList.remove('preview-expanded');
+                previewToggleCollapsed.classList.remove('hidden');
+                previewToggleIcon.className = 'fas fa-chevron-right';
+                
+                this.logger.debug('Preview panel collapsed');
+                this.addLogEntry('info', 'Aperçu réduit');
+            } else {
+                // Expand preview
+                previewPanel.classList.remove('preview-collapsed');
+                previewPanel.classList.add('preview-expanded');
+                previewToggleCollapsed.classList.add('hidden');
+                previewToggleIcon.className = 'fas fa-chevron-left';
+                
+                this.logger.debug('Preview panel expanded');
+                this.addLogEntry('info', 'Aperçu affiché');
+            }
+        };
+        
+        // Event listeners
+        togglePreviewBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            togglePreview();
+        });
+        
+        expandPreviewBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            if (isPreviewCollapsed) {
+                togglePreview();
+            }
+        });
+        
+        // Keyboard shortcut (Ctrl+P for preview toggle)
+        document.addEventListener('keydown', (e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === 'p' && !e.shiftKey) {
+                // Check if we're in the editor tab
+                const editorTab = document.getElementById('editor-tab');
+                if (editorTab && editorTab.classList.contains('tab-active')) {
+                    e.preventDefault();
+                    togglePreview();
+                }
+            }
+        });
+        
+        this.logger.debug('Preview toggle functionality configured');
     }
     
     /**
@@ -1437,9 +1533,10 @@ export class PromptEditorApp extends EventTarget {
             this.state.isReady = true;
             this.updateActivity();
             
-            this.logger.info('🎉 Application started successfully');
-            
-            // Emit ready event
+            // Initialize preview on startup
+            this.initializePreview();
+
+            this.logger.info('🎉 Application started successfully');            // Emit ready event
             this.dispatchEvent(new CustomEvent(AppEvents.APP_READY, {
                 detail: {
                     startupTime: this.metrics.startupTime,
@@ -2878,31 +2975,163 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
     }
     
     /**
-     * Update markdown preview
+     * Update markdown preview with debouncing
      */
     updateMarkdownPreview() {
-        const editor = document.getElementById('markdown-editor');
-        const preview = document.getElementById('markdown-preview');
+        // Clear existing timeout to debounce rapid updates
+        if (this.previewUpdateTimeout) {
+            clearTimeout(this.previewUpdateTimeout);
+        }
         
-        if (!editor || !preview) return;
-        
-        const content = editor.value;
-        if (content.trim()) {
-            // Use marked.js to parse markdown
-            if (typeof marked !== 'undefined') {
-                preview.innerHTML = marked.parse(content);
-            } else {
-                // Fallback simple formatting
-                preview.innerHTML = content
-                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
-                    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
-                    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
-                    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
-                    .replace(/\n/g, '<br>');
+        // Debounce updates to avoid excessive processing
+        this.previewUpdateTimeout = setTimeout(() => {
+            this.doUpdateMarkdownPreview();
+        }, 150); // 150ms debounce delay
+    }
+    
+    /**
+     * Perform the actual markdown preview update
+     */
+    doUpdateMarkdownPreview() {
+        try {
+            const editor = document.getElementById('markdown-editor');
+            const preview = document.getElementById('markdown-preview');
+            
+            if (!editor || !preview) {
+                this.logger.warn('Editor or preview element not found');
+                return;
             }
-        } else {
-            preview.innerHTML = '<p class="text-gray-500 dark:text-gray-400 italic">L\'aperçu apparaîtra ici...</p>';
+            
+            const content = editor.value;
+            const trimmedContent = content.trim();
+            
+            if (trimmedContent) {
+                // Use marked.js to parse markdown if available
+                if (typeof marked !== 'undefined') {
+                    try {
+                        const htmlContent = marked.parse(content, {
+                            breaks: true,
+                            gfm: true,
+                            sanitize: false
+                        });
+                        preview.innerHTML = htmlContent;
+                    } catch (markedError) {
+                        this.logger.warn('Marked.js parsing error:', markedError);
+                        // Fallback to simple formatting
+                        this.applySimpleFormatting(content, preview);
+                    }
+                } else {
+                    // Fallback simple formatting
+                    this.applySimpleFormatting(content, preview);
+                }
+                
+                // Add styling classes to rendered content
+                this.enhancePreviewStyling(preview);
+                
+            } else {
+                // Empty content placeholder
+                preview.innerHTML = '<p class="text-gray-500 dark:text-gray-400 italic">L\'aperçu apparaîtra ici...</p>';
+            }
+            
+            // Scroll preview to maintain position if needed
+            this.syncPreviewScroll();
+            
+        } catch (error) {
+            this.logger.error('Error updating markdown preview:', error);
+            const preview = document.getElementById('markdown-preview');
+            if (preview) {
+                preview.innerHTML = '<p class="text-red-500 italic">Erreur lors de la mise à jour de l\'aperçu</p>';
+            }
+        }
+    }
+    
+    /**
+     * Apply simple markdown formatting as fallback
+     */
+    applySimpleFormatting(content, preview) {
+        const formatted = content
+            // Headers
+            .replace(/^### (.*$)/gim, '<h3 class="text-lg font-semibold mb-2 mt-4">$1</h3>')
+            .replace(/^## (.*$)/gim, '<h2 class="text-xl font-semibold mb-3 mt-4">$1</h2>')
+            .replace(/^# (.*$)/gim, '<h1 class="text-2xl font-bold mb-4 mt-4">$1</h1>')
+            // Bold and italic
+            .replace(/\*\*(.*?)\*\*/g, '<strong class="font-semibold">$1</strong>')
+            .replace(/\*(.*?)\*/g, '<em class="italic">$1</em>')
+            // Code blocks
+            .replace(/```([\s\S]*?)```/g, '<pre class="bg-gray-100 dark:bg-gray-800 p-3 rounded-lg my-2 overflow-x-auto"><code>$1</code></pre>')
+            .replace(/`(.*?)`/g, '<code class="bg-gray-100 dark:bg-gray-800 px-1 py-0.5 rounded text-sm">$1</code>')
+            // Lists
+            .replace(/^\* (.*$)/gim, '<li class="ml-4">• $1</li>')
+            .replace(/^- (.*$)/gim, '<li class="ml-4">• $1</li>')
+            // Line breaks
+            .replace(/\n\n/g, '</p><p class="mb-2">')
+            .replace(/\n/g, '<br>');
+            
+        preview.innerHTML = `<div class="prose dark:prose-invert max-w-none"><p class="mb-2">${formatted}</p></div>`;
+    }
+    
+    /**
+     * Enhance preview styling
+     */
+    enhancePreviewStyling(preview) {
+        // Add classes to common elements
+        const headers = preview.querySelectorAll('h1, h2, h3, h4, h5, h6');
+        headers.forEach(header => {
+            header.classList.add('text-gray-900', 'dark:text-white');
+        });
+        
+        const codeBlocks = preview.querySelectorAll('pre');
+        codeBlocks.forEach(block => {
+            block.classList.add('bg-gray-100', 'dark:bg-gray-800', 'p-3', 'rounded-lg', 'my-2', 'overflow-x-auto');
+        });
+        
+        const inlineCode = preview.querySelectorAll('code:not(pre code)');
+        inlineCode.forEach(code => {
+            code.classList.add('bg-gray-100', 'dark:bg-gray-800', 'px-1', 'py-0.5', 'rounded', 'text-sm');
+        });
+    }
+    
+    /**
+     * Sync preview scroll position with editor if needed
+     */
+    syncPreviewScroll() {
+        // This could be enhanced to sync scroll positions
+        // For now, just ensure preview is visible
+        const preview = document.getElementById('markdown-preview');
+        if (preview && preview.scrollHeight > preview.clientHeight) {
+            // Auto-scroll to bottom for new content
+            const isNearBottom = preview.scrollTop > (preview.scrollHeight - preview.clientHeight - 100);
+            if (isNearBottom) {
+                preview.scrollTop = preview.scrollHeight;
+            }
+        }
+    }
+    
+    /**
+     * Initialize preview on application startup
+     */
+    initializePreview() {
+        try {
+            this.logger.debug('Initializing markdown preview...');
+            
+            // Initialize preview state
+            this.previewUpdateTimeout = null;
+            
+            // Initial preview update
+            this.updateMarkdownPreview();
+            
+            // Set up periodic refresh (every 30 seconds) to handle any edge cases
+            this.previewRefreshInterval = setInterval(() => {
+                const editor = document.getElementById('markdown-editor');
+                if (editor && editor.value.trim()) {
+                    this.updateMarkdownPreview();
+                }
+            }, 30000);
+            
+            this.logger.debug('Preview initialized successfully');
+            
+        } catch (error) {
+            this.logger.error('Error initializing preview:', error);
         }
     }
 
@@ -2926,7 +3155,17 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
             }
             
             // Clear intervals and timeouts
-            // (Would need to track these)
+            if (this.previewRefreshInterval) {
+                clearInterval(this.previewRefreshInterval);
+                this.previewRefreshInterval = null;
+                this.logger.debug('Preview refresh interval cleared');
+            }
+            
+            if (this.previewUpdateTimeout) {
+                clearTimeout(this.previewUpdateTimeout);
+                this.previewUpdateTimeout = null;
+                this.logger.debug('Preview update timeout cleared');
+            }
             
             this.logger.info('🧹 Application cleanup completed');
             

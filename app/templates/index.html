@@ -101,6 +101,32 @@
             background-color: #374151;
         }
         
+        /* Preview panel styles */
+        .preview-collapsed {
+            flex: 0 0 auto !important;
+            width: 0 !important;
+            padding: 0 !important;
+            overflow: hidden !important;
+        }
+        
+        .preview-expanded {
+            flex: 1 !important;
+        }
+        
+        .editor-expanded {
+            flex: 1 !important;
+        }
+        
+        .editor-full {
+            flex: 1 !important;
+        }
+        
+        /* Vertical writing mode for collapsed button */
+        .writing-mode-vertical {
+            writing-mode: vertical-rl;
+            text-orientation: mixed;
+        }
+        
         /* Template card hover effects */
         .template-card:hover {
             transform: translateY(-2px);
@@ -511,13 +537,33 @@
                             </div>
                             
                             <!-- Live Preview -->
-                            <div class="flex-1 border-l border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900">
+                            <div id="preview-panel" class="flex-1 border-l border-gray-200 dark:border-gray-700 p-4 bg-gray-50 dark:bg-gray-900 transition-all duration-300">
                                 <div class="h-full">
-                                    <h4 class="text-sm font-semibold text-gray-500 dark:text-gray-400 mb-3">Aperçu</h4>
+                                    <div class="flex items-center justify-between mb-3">
+                                        <h4 class="text-sm font-semibold text-gray-500 dark:text-gray-400">Aperçu</h4>
+                                        <button 
+                                            id="toggle-preview" 
+                                            class="text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 p-1 rounded transition-colors duration-200"
+                                            title="Réduire/Agrandir l'aperçu"
+                                        >
+                                            <i id="preview-toggle-icon" class="fas fa-chevron-left"></i>
+                                        </button>
+                                    </div>
                                     <div id="markdown-preview" class="markdown-preview custom-scrollbar overflow-y-auto h-full bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-600 text-gray-900 dark:text-white">
                                         <p class="text-gray-500 dark:text-gray-400 italic">L'aperçu apparaîtra ici...</p>
                                     </div>
                                 </div>
+                            </div>
+                            
+                            <!-- Preview Toggle Button (when collapsed) -->
+                            <div id="preview-toggle-collapsed" class="hidden border-l border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900 transition-all duration-300">
+                                <button 
+                                    id="expand-preview" 
+                                    class="h-full px-2 text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors duration-200 writing-mode-vertical"
+                                    title="Afficher l'aperçu"
+                                >
+                                    <i class="fas fa-chevron-right"></i>
+                                </button>
                             </div>
                         </div>
                     </div>
