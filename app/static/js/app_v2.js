@@ -95,6 +95,9 @@ export class PromptEditorApp extends EventTarget {
         try {
             this.logger.info('🏗️ Starting application initialization...');
             
+            // Initialize theme first
+            this.initializeTheme();
+            
             // Set up development mode if enabled
             if (this.config.debug) {
                 DevLogger.enableDebug();
@@ -437,6 +440,75 @@ export class PromptEditorApp extends EventTarget {
             });
         }
         
+        // Theme toggle button
+        const themeToggle = document.getElementById('theme-toggle');
+        if (themeToggle) {
+            themeToggle.addEventListener('click', () => {
+                this.toggleTheme();
+            });
+        }
+        
+        // Navigation buttons
+        const navBackBtn = document.getElementById('nav-back-btn');
+        const navForwardBtn = document.getElementById('nav-forward-btn');
+        if (navBackBtn) {
+            navBackBtn.addEventListener('click', () => {
+                this.navigateBack();
+            });
+        }
+        if (navForwardBtn) {
+            navForwardBtn.addEventListener('click', () => {
+                this.navigateForward();
+            });
+        }
+        
+        // New folder button
+        const newFolderBtn = document.getElementById('new-folder-btn');
+        if (newFolderBtn) {
+            newFolderBtn.addEventListener('click', () => {
+                this.showNewFolderModal();
+            });
+        }
+        
+        // Export all button
+        const exportAllBtn = document.getElementById('export-all-to-folder');
+        if (exportAllBtn) {
+            exportAllBtn.addEventListener('click', () => {
+                this.exportAllToFolder();
+            });
+        }
+        
+        // View favorites/all buttons
+        const viewFavoritesBtn = document.getElementById('view-favorites');
+        const viewAllBtn = document.getElementById('view-all');
+        if (viewFavoritesBtn) {
+            viewFavoritesBtn.addEventListener('click', () => {
+                this.filterTemplates('favorites');
+            });
+        }
+        if (viewAllBtn) {
+            viewAllBtn.addEventListener('click', () => {
+                this.filterTemplates('all');
+            });
+        }
+        
+        // Markdown toolbar buttons
+        const toolbarButtons = document.querySelectorAll('.markdown-toolbar button');
+        toolbarButtons.forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                const action = e.currentTarget.dataset.action;
+                this.applyMarkdownFormat(action);
+            });
+        });
+        
+        // Markdown editor for live preview
+        const markdownEditor = document.getElementById('markdown-editor');
+        if (markdownEditor) {
+            markdownEditor.addEventListener('input', () => {
+                this.updateMarkdownPreview();
+            });
+        }
+        
         this.logger.info('🎯 Critical DOM event listeners configured');
     }
     
@@ -734,6 +806,9 @@ export class PromptEditorApp extends EventTarget {
             
             // Load templates for sidebar
             await this.loadTemplatesForSidebar();
+            
+            // Load folders for navigation panel
+            await this.loadFoldersForNavigation();
             
             const loadTime = performanceLogger.end(timerName);
             this.logger.info(`📊 Initial data loaded in ${loadTime.toFixed(2)}ms`);
@@ -1044,6 +1119,458 @@ export class PromptEditorApp extends EventTarget {
     }
 
     /**
+     * Toggle dark/light theme
+     */
+    toggleTheme() {
+        this.logger.debug('Toggling theme...');
+        const html = document.documentElement;
+        const isDark = html.classList.contains('dark');
+        
+        if (isDark) {
+            html.classList.remove('dark');
+            localStorage.setItem('theme', 'light');
+            this.updateThemeIcon('light');
+        } else {
+            html.classList.add('dark');
+            localStorage.setItem('theme', 'dark');
+            this.updateThemeIcon('dark');
+        }
+        
+        this.logger.info(`Theme switched to: ${isDark ? 'light' : 'dark'}`);
+    }
+    
+    /**
+     * Update theme icon
+     */
+    updateThemeIcon(theme) {
+        const icon = document.getElementById('theme-icon');
+        if (icon) {
+            icon.className = theme === 'dark' ? 'fas fa-sun' : 'fas fa-moon';
+        }
+    }
+    
+    /**
+     * Initialize theme from localStorage
+     */
+    initializeTheme() {
+        const savedTheme = localStorage.getItem('theme');
+        const prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        const isDark = savedTheme === 'dark' || (!savedTheme && prefersDark);
+        
+        if (isDark) {
+            document.documentElement.classList.add('dark');
+            this.updateThemeIcon('dark');
+        } else {
+            this.updateThemeIcon('light');
+        }
+    }
+    
+    /**
+     * Navigation history management
+     */
+    navigateBack() {
+        this.logger.debug('Navigate back clicked');
+        // Implement navigation history
+        window.history.back();
+    }
+    
+    navigateForward() {
+        this.logger.debug('Navigate forward clicked');
+        // Implement navigation history
+        window.history.forward();
+    }
+    
+    /**
+     * Show new folder modal
+     */
+    showNewFolderModal() {
+        this.logger.debug('Showing new folder modal...');
+        const modalOverlay = document.getElementById('modal-overlay');
+        const modalContent = document.getElementById('modal-content');
+        
+        if (!modalOverlay || !modalContent) return;
+        
+        modalContent.innerHTML = `
+            <div class="space-y-4">
+                <h3 class="text-lg font-semibold text-gray-900 dark:text-white">Nouveau dossier</h3>
+                <div>
+                    <label for="folder-name" class="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                        Nom du dossier
+                    </label>
+                    <input 
+                        type="text" 
+                        id="folder-name" 
+                        class="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                        placeholder="Entrez le nom du dossier..."
+                        maxlength="100"
+                    >
+                </div>
+                <div class="flex justify-end space-x-3">
+                    <button 
+                        onclick="app.closeModal()" 
+                        class="px-4 py-2 text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white transition-colors"
+                    >
+                        Annuler
+                    </button>
+                    <button 
+                        onclick="app.createFolder()" 
+                        class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                    >
+                        Créer
+                    </button>
+                </div>
+            </div>
+        `;
+        
+        modalOverlay.classList.remove('hidden');
+        
+        // Focus on input
+        setTimeout(() => {
+            const input = document.getElementById('folder-name');
+            if (input) input.focus();
+        }, 100);
+    }
+    
+    /**
+     * Close modal
+     */
+    closeModal() {
+        const modalOverlay = document.getElementById('modal-overlay');
+        if (modalOverlay) {
+            modalOverlay.classList.add('hidden');
+        }
+    }
+    
+    /**
+     * Create new folder
+     */
+    async createFolder() {
+        const nameInput = document.getElementById('folder-name');
+        if (!nameInput) return;
+        
+        const name = nameInput.value.trim();
+        if (!name) {
+            this.showNotification('Veuillez entrer un nom pour le dossier', 'error');
+            return;
+        }
+        
+        try {
+            const response = await fetch('/api/folders', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ name })
+            });
+            
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            const result = await response.json();
+            this.logger.info('Folder created successfully:', result);
+            
+            this.showNotification('Dossier créé avec succès !', 'success');
+            this.closeModal();
+            
+            // Reload folder tree
+            await this.loadFoldersForNavigation();
+            
+        } catch (error) {
+            this.logger.error('Error creating folder:', error);
+            this.showNotification(`Erreur lors de la création: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * Load folders for navigation panel
+     */
+    async loadFoldersForNavigation() {
+        try {
+            const response = await fetch('/api/folders');
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            const folders = data.data || [];
+            
+            const folderTree = document.getElementById('folder-tree');
+            if (!folderTree) return;
+            
+            folderTree.innerHTML = '';
+            
+            if (folders.length === 0) {
+                folderTree.innerHTML = `
+                    <div class="text-center py-8 text-gray-500 dark:text-gray-400">
+                        <i class="fas fa-folder-open text-2xl mb-2"></i>
+                        <p>Aucun dossier</p>
+                        <button onclick="app.showNewFolderModal()" class="mt-2 text-blue-600 hover:text-blue-800 text-sm">
+                            Créer votre premier dossier
+                        </button>
+                    </div>
+                `;
+                return;
+            }
+            
+            folders.forEach(folder => {
+                const folderElement = this.createFolderElement(folder);
+                folderTree.appendChild(folderElement);
+            });
+            
+        } catch (error) {
+            this.logger.error('Error loading folders:', error);
+        }
+    }
+    
+    /**
+     * Create folder element for navigation
+     */
+    createFolderElement(folder) {
+        const element = document.createElement('div');
+        element.className = 'folder-item group';
+        element.dataset.folderId = folder.id;
+        
+        element.innerHTML = `
+            <div class="flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer">
+                <div class="flex items-center space-x-2">
+                    <i class="fas fa-folder text-blue-600 dark:text-blue-400"></i>
+                    <span class="text-sm font-medium text-gray-900 dark:text-white">${folder.name}</span>
+                </div>
+                <span class="text-xs text-gray-500 dark:text-gray-400">${folder.template_count || 0}</span>
+            </div>
+        `;
+        
+        element.addEventListener('click', () => {
+            this.selectFolder(folder.id, folder.name);
+        });
+        
+        return element;
+    }
+    
+    /**
+     * Select folder and show its templates
+     */
+    async selectFolder(folderId, folderName) {
+        this.logger.debug(`Selecting folder: ${folderName} (${folderId})`);
+        
+        try {
+            const response = await fetch(`/api/folders/${folderId}/templates`);
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            const templates = data.data || [];
+            
+            // Update folder title
+            const titleElement = document.getElementById('current-folder-title');
+            if (titleElement) {
+                titleElement.textContent = folderName;
+            }
+            
+            // Update templates grid
+            const templatesGrid = document.getElementById('templates-grid');
+            if (!templatesGrid) return;
+            
+            templatesGrid.innerHTML = '';
+            
+            if (templates.length === 0) {
+                templatesGrid.innerHTML = `
+                    <div class="col-span-full text-center py-8">
+                        <p class="text-gray-500 dark:text-gray-400">Aucun template dans ce dossier</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            templates.forEach(template => {
+                const templateCard = this.createTemplateCard(template);
+                templatesGrid.appendChild(templateCard);
+            });
+            
+            // Update count
+            const countElement = document.getElementById('templates-count');
+            if (countElement) {
+                countElement.textContent = `${templates.length} template(s)`;
+            }
+            
+        } catch (error) {
+            this.logger.error('Error loading folder templates:', error);
+        }
+    }
+    
+    /**
+     * Export all templates to folder
+     */
+    async exportAllToFolder() {
+        this.logger.debug('Exporting all templates to folder...');
+        
+        try {
+            const response = await fetch('/api/templates');
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            const templates = data.data || [];
+            
+            if (templates.length === 0) {
+                this.showNotification('Aucun template à exporter', 'error');
+                return;
+            }
+            
+            // Create ZIP file
+            const zip = new JSZip();
+            
+            templates.forEach(template => {
+                const filename = `${template.title.replace(/[^a-zA-Z0-9]/g, '_')}.md`;
+                const content = `# ${template.title}\n\n${template.content || ''}`;
+                zip.file(filename, content);
+            });
+            
+            // Generate and download ZIP
+            const blob = await zip.generateAsync({ type: 'blob' });
+            const url = URL.createObjectURL(blob);
+            
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'tous_les_templates.zip';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            
+            URL.revokeObjectURL(url);
+            
+            this.showNotification('Tous les templates ont été exportés !', 'success');
+            
+        } catch (error) {
+            this.logger.error('Error exporting all templates:', error);
+            this.showNotification(`Erreur lors de l'export: ${error.message}`, 'error');
+        }
+    }
+    
+    /**
+     * Filter templates (favorites/all)
+     */
+    async filterTemplates(filter) {
+        this.logger.debug(`Filtering templates: ${filter}`);
+        
+        try {
+            let url = '/api/templates';
+            if (filter === 'favorites') {
+                url += '?favorites=true';
+            }
+            
+            const response = await fetch(url);
+            if (!response.ok) return;
+            
+            const data = await response.json();
+            const templates = data.data || [];
+            
+            // Update templates grid
+            const templatesGrid = document.getElementById('templates-grid');
+            if (!templatesGrid) return;
+            
+            templatesGrid.innerHTML = '';
+            
+            if (templates.length === 0) {
+                templatesGrid.innerHTML = `
+                    <div class="col-span-full text-center py-8">
+                        <p class="text-gray-500 dark:text-gray-400">
+                            ${filter === 'favorites' ? 'Aucun template favori' : 'Aucun template trouvé'}
+                        </p>
+                    </div>
+                `;
+                return;
+            }
+            
+            templates.forEach(template => {
+                const templateCard = this.createTemplateCard(template);
+                templatesGrid.appendChild(templateCard);
+            });
+            
+            // Update count
+            const countElement = document.getElementById('templates-count');
+            if (countElement) {
+                countElement.textContent = `${templates.length} template(s)`;
+            }
+            
+            // Update folder title
+            const titleElement = document.getElementById('current-folder-title');
+            if (titleElement) {
+                titleElement.textContent = filter === 'favorites' ? 'Templates favoris' : 'Tous les templates';
+            }
+            
+        } catch (error) {
+            this.logger.error('Error filtering templates:', error);
+        }
+    }
+    
+    /**
+     * Apply markdown formatting
+     */
+    applyMarkdownFormat(action) {
+        const editor = document.getElementById('markdown-editor');
+        if (!editor) return;
+        
+        const start = editor.selectionStart;
+        const end = editor.selectionEnd;
+        const selectedText = editor.value.substring(start, end);
+        let replacement = '';
+        
+        switch (action) {
+            case 'bold':
+                replacement = `**${selectedText || 'texte en gras'}**`;
+                break;
+            case 'italic':
+                replacement = `*${selectedText || 'texte en italique'}*`;
+                break;
+            case 'heading':
+                replacement = `# ${selectedText || 'Titre'}`;
+                break;
+            case 'list':
+                replacement = `- ${selectedText || 'élément de liste'}`;
+                break;
+            case 'quote':
+                replacement = `> ${selectedText || 'citation'}`;
+                break;
+            case 'code':
+                replacement = `\`${selectedText || 'code'}\``;
+                break;
+        }
+        
+        if (replacement) {
+            editor.value = editor.value.substring(0, start) + replacement + editor.value.substring(end);
+            editor.focus();
+            this.updateMarkdownPreview();
+        }
+    }
+    
+    /**
+     * Update markdown preview
+     */
+    updateMarkdownPreview() {
+        const editor = document.getElementById('markdown-editor');
+        const preview = document.getElementById('markdown-preview');
+        
+        if (!editor || !preview) return;
+        
+        const content = editor.value;
+        if (content.trim()) {
+            // Use marked.js to parse markdown
+            if (typeof marked !== 'undefined') {
+                preview.innerHTML = marked.parse(content);
+            } else {
+                // Fallback simple formatting
+                preview.innerHTML = content
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                    .replace(/\*(.*?)\*/g, '<em>$1</em>')
+                    .replace(/^# (.*$)/gim, '<h1>$1</h1>')
+                    .replace(/^## (.*$)/gim, '<h2>$1</h2>')
+                    .replace(/^### (.*$)/gim, '<h3>$1</h3>')
+                    .replace(/\n/g, '<br>');
+            }
+        } else {
+            preview.innerHTML = '<p class="text-gray-500 dark:text-gray-400 italic">L\'aperçu apparaîtra ici...</p>';
+        }
+    }
+
+    /**
      * Cleanup application resources
      */
     cleanup() {
@@ -1111,12 +1638,15 @@ export async function createApp(config = {}) {
         // Initialize the application
         await appInstance.initialize();
         
-        // Make globally available for debugging
+        // Make globally available for debugging and HTML onclick handlers
         if (appConfig.debug) {
             window.app = appInstance;
             window.logger = logger;
             window.state = stateManager;
         }
+        
+        // Always make app available for HTML onclick handlers
+        window.app = appInstance;
         
         return appInstance;
         
