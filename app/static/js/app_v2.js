@@ -2357,7 +2357,7 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
             folderTree.innerHTML = '';
 
             // Add "All templates" option at the top
-            const allTemplatesElement = this.createAllTemplatesElement();
+            const allTemplatesElement = await this.createAllTemplatesElement();
             folderTree.appendChild(allTemplatesElement);
             
             if (folders.length === 0) {
@@ -2440,11 +2440,23 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
     /**
      * Create "All templates" element
      */
-    createAllTemplatesElement() {
+    async createAllTemplatesElement() {
         const element = document.createElement('div');
         element.className = 'folder-item group all-templates-item mb-2';
         element.dataset.folderId = 'all';
         element.dataset.folderName = 'Tous les templates';
+        
+        // Get total templates count
+        let totalCount = 0;
+        try {
+            const response = await fetch('/api/templates');
+            if (response.ok) {
+                const data = await response.json();
+                totalCount = data.count || (data.data ? data.data.length : 0);
+            }
+        } catch (error) {
+            this.logger.error('Error fetching total templates count:', error);
+        }
         
         element.innerHTML = `
             <div class="folder-content flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer bg-blue-50 dark:bg-blue-900 border border-blue-200 dark:border-blue-700 transition-colors">
@@ -2452,7 +2464,10 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
                     <i class="fas fa-th-large text-blue-600 dark:text-blue-400"></i>
                     <span class="text-sm font-medium text-blue-900 dark:text-blue-100">Tous les templates</span>
                 </div>
-                <i class="fas fa-chevron-right text-blue-600 dark:text-blue-400"></i>
+                <div class="flex items-center space-x-2">
+                    <span class="text-xs text-blue-700 dark:text-blue-300 bg-blue-100 dark:bg-blue-800 px-2 py-1 rounded">${totalCount}</span>
+                    <i class="fas fa-chevron-right text-blue-600 dark:text-blue-400"></i>
+                </div>
             </div>
         `;
         
@@ -2468,6 +2483,25 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
     }
     
     /**
+     * Calculate total template count for a folder (including subfolders)
+     */
+    calculateFolderTemplateCount(folder) {
+        if (!folder) return 0;
+        
+        // Start with direct templates count
+        let count = folder.templates_count || 0;
+        
+        // Add templates from all children recursively
+        if (folder.children && folder.children.length > 0) {
+            folder.children.forEach(child => {
+                count += this.calculateFolderTemplateCount(child);
+            });
+        }
+        
+        return count;
+    }
+    
+    /**
      * Create folder element for navigation
      */
     createFolderElement(folder) {
@@ -2477,6 +2511,9 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
         element.dataset.folderName = folder.name;
         element.draggable = true; // Make folders draggable
         
+        // Calculate total template count (including subfolders)
+        const totalCount = this.calculateFolderTemplateCount(folder);
+        
         element.innerHTML = `
             <div class="folder-content flex items-center justify-between p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-700 cursor-pointer transition-colors">
                 <div class="flex items-center space-x-2">
@@ -2484,7 +2521,7 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
                     <span class="text-sm font-medium text-gray-900 dark:text-white">${folder.name}</span>
                 </div>
                 <div class="flex items-center space-x-2">
-                    <span class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">${folder.template_count || 0}</span>
+                    <span class="text-xs text-gray-500 dark:text-gray-400 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded" title="${folder.templates_count || 0} template(s) direct(s)">${totalCount}</span>
                     <button class="delete-folder-btn opacity-0 group-hover:opacity-100 text-red-500 hover:text-red-700 p-1 transition-all" data-folder-id="${folder.id}" title="Supprimer le dossier">
                         <i class="fas fa-trash text-xs"></i>
                     </button>
