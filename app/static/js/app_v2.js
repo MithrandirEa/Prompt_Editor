@@ -728,6 +728,13 @@ export class PromptEditorApp extends EventTarget {
             this.navigationClickHandler = null;
             this.logger.debug('Navigation panel handlers cleaned up');
         }
+        
+        const templatesSidebar = document.getElementById('templates-sidebar');
+        if (templatesSidebar && this.sidebarClickHandler) {
+            templatesSidebar.removeEventListener('click', this.sidebarClickHandler);
+            this.sidebarClickHandler = null;
+            this.logger.debug('Sidebar handlers cleaned up');
+        }
     }
 
     /**
@@ -737,8 +744,19 @@ export class PromptEditorApp extends EventTarget {
         // Clean up any existing handlers first
         this.cleanupNavigationHandlers();
         
-        // Use event delegation since template items may be added dynamically
-        // Delegate to navigation panel specifically to avoid conflicts
+        // Setup handlers for navigation panel
+        this.setupNavigationPanelHandlers();
+        
+        // Setup handlers for sidebar (templates récents/favoris)
+        this.setupSidebarTemplateHandlers();
+        
+        this.logger.debug('All template item handlers configured');
+    }
+    
+    /**
+     * Setup navigation panel click handlers
+     */
+    setupNavigationPanelHandlers() {
         const navigationPanel = document.getElementById('navigation-panel');
         if (!navigationPanel) {
             this.logger.warn('Navigation panel not found for event delegation');
@@ -801,7 +819,48 @@ export class PromptEditorApp extends EventTarget {
         // Attach the handler
         navigationPanel.addEventListener('click', this.navigationClickHandler);
         
-        this.logger.debug('Template items handlers configured with proper delegation');
+        this.logger.debug('Navigation panel handlers configured');
+    }
+    
+    /**
+     * Setup sidebar template click handlers
+     */
+    setupSidebarTemplateHandlers() {
+        const templatesSidebar = document.getElementById('templates-sidebar');
+        if (!templatesSidebar) {
+            this.logger.warn('Templates sidebar not found for event delegation');
+            return;
+        }
+        
+        // Store the handler for cleanup
+        this.sidebarClickHandler = async (e) => {
+            // Handle template item clicks in sidebar (recent/favorites)
+            const templateItem = e.target.closest('.template-item');
+            if (templateItem) {
+                e.stopPropagation();
+                const templateId = templateItem.dataset.templateId;
+                if (templateId) {
+                    this.logger.debug(`Sidebar template item clicked: ${templateId}`);
+                    
+                    // Switch to editor tab
+                    const editorTab = document.getElementById('editor-tab');
+                    if (editorTab) {
+                        editorTab.click();
+                        // Wait for tab switch
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                    }
+                    
+                    // Load template in editor
+                    await this.loadTemplateInEditor(templateId);
+                }
+                return;
+            }
+        };
+        
+        // Attach the handler
+        templatesSidebar.addEventListener('click', this.sidebarClickHandler);
+        
+        this.logger.debug('Sidebar template handlers configured');
     }
     
     /**
