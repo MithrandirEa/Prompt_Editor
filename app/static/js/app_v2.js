@@ -3085,30 +3085,47 @@ Favori: ${template.is_favorite ? 'Oui' : 'Non'}
         const end = editor.selectionEnd;
         const selectedText = editor.value.substring(start, end);
         let replacement = '';
+        let cursorOffset = 0; // Pour positionner le curseur
         
         switch (action) {
             case 'bold':
-                replacement = `**${selectedText || 'texte en gras'}**`;
+                replacement = `**${selectedText}**`;
+                cursorOffset = selectedText ? replacement.length : 2; // Position entre les **
                 break;
             case 'italic':
-                replacement = `*${selectedText || 'texte en italique'}*`;
+                replacement = `*${selectedText}*`;
+                cursorOffset = selectedText ? replacement.length : 1; // Position entre les *
                 break;
             case 'heading':
-                replacement = `# ${selectedText || 'Titre'}`;
+                replacement = `# ${selectedText}`;
+                cursorOffset = replacement.length; // Position à la fin
                 break;
             case 'list':
-                replacement = `- ${selectedText || 'élément de liste'}`;
+                replacement = `- ${selectedText}`;
+                cursorOffset = replacement.length; // Position à la fin
                 break;
             case 'quote':
-                replacement = `> ${selectedText || 'citation'}`;
+                replacement = `> ${selectedText}`;
+                cursorOffset = replacement.length; // Position à la fin
                 break;
             case 'code':
-                replacement = `\`${selectedText || 'code'}\``;
+                replacement = `\`${selectedText}\``;
+                cursorOffset = selectedText ? replacement.length : 1; // Position entre les `
                 break;
         }
         
-        if (replacement) {
+        if (replacement !== null) {
             editor.value = editor.value.substring(0, start) + replacement + editor.value.substring(end);
+            
+            // Position le curseur correctement
+            if (selectedText) {
+                // Si du texte était sélectionné, place le curseur après le formatage
+                editor.setSelectionRange(start + replacement.length, start + replacement.length);
+            } else {
+                // Si rien n'était sélectionné, place le curseur au milieu du formatage
+                editor.setSelectionRange(start + cursorOffset, start + cursorOffset);
+            }
+            
             editor.focus();
             this.updateMarkdownPreview();
         }
