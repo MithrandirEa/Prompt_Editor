@@ -504,20 +504,6 @@ export class PromptEditorApp extends EventTarget {
             });
         }
         
-        // Navigation buttons
-        const navBackBtn = document.getElementById('nav-back-btn');
-        const navForwardBtn = document.getElementById('nav-forward-btn');
-        if (navBackBtn) {
-            navBackBtn.addEventListener('click', () => {
-                this.navigateBack();
-            });
-        }
-        if (navForwardBtn) {
-            navForwardBtn.addEventListener('click', () => {
-                this.navigateForward();
-            });
-        }
-        
         // New folder button
         const newFolderBtn = document.getElementById('new-folder-btn');
         if (newFolderBtn) {
